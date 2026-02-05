@@ -3,1254 +3,2160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Karanja Shoe Store - Quality Footwear</title>
+    <title>Karanja Shoe Store - Admin Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Base Styles */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         :root {
-            --primary: #2c3e50;
-            --secondary: #e74c3c;
-            --accent: #f39c12;
-            --light: #ecf0f1;
-            --dark: #2c3e50;
-            --gray: #95a5a6;
+            --primary: #1a237e;
+            --secondary: #ff5722;
+            --accent: #2196f3;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --danger: #f44336;
+            --light: #f5f7fa;
+            --dark: #0d1b2a;
+            --gray: #78909c;
+            --sidebar: #0d1b2a;
         }
 
         body {
-            background-color: #f9f9f9;
+            background-color: var(--light);
             color: #333;
-            line-height: 1.6;
+            display: flex;
+            min-height: 100vh;
         }
 
-        .container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 15px;
-        }
-
-        /* Header Styles */
-        header {
-            background-color: var(--primary);
+        /* Sidebar */
+        .sidebar {
+            width: 250px;
+            background: var(--sidebar);
             color: white;
-            padding: 15px 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            position: sticky;
-            top: 0;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            transition: all 0.3s;
             z-index: 1000;
         }
 
-        .header-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .sidebar-header {
+            padding: 0 20px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
         }
 
         .logo {
-            font-size: 24px;
-            font-weight: 700;
-            color: white;
-            text-decoration: none;
             display: flex;
             align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
         }
 
         .logo i {
-            color: var(--accent);
-            margin-right: 10px;
+            color: var(--secondary);
+            font-size: 1.8rem;
+        }
+
+        .logo h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
         }
 
         .logo span {
-            color: var(--accent);
+            color: var(--secondary);
         }
 
-        nav ul {
-            display: flex;
-            list-style: none;
+        .admin-info {
+            text-align: center;
+            padding: 15px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        nav ul li {
-            margin-left: 25px;
+        .admin-info img {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 3px solid var(--secondary);
+            margin-bottom: 10px;
         }
 
-        nav ul li a {
-            color: white;
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.3s;
+        .admin-info h4 {
+            font-size: 1.2rem;
+            margin-bottom: 5px;
+        }
+
+        .admin-info p {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .nav-menu {
+            padding: 20px 0;
+        }
+
+        .nav-item {
+            padding: 12px 20px;
             display: flex;
             align-items: center;
+            gap: 15px;
+            color: #ddd;
+            text-decoration: none;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
         }
 
-        nav ul li a:hover {
-            color: var(--accent);
+        .nav-item:hover, .nav-item.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-left-color: var(--secondary);
         }
 
-        nav ul li a i {
-            margin-right: 5px;
+        .nav-item i {
+            width: 20px;
+            text-align: center;
         }
 
-        .cart-icon {
+        .logout {
+            margin-top: 30px;
+            padding: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 250px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .header h1 {
+            color: var(--primary);
+            font-size: 1.8rem;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .search-box {
             position: relative;
         }
 
-        .cart-count {
+        .search-box input {
+            padding: 10px 15px 10px 40px;
+            border: 1px solid #ddd;
+            border-radius: 30px;
+            width: 250px;
+            font-size: 0.9rem;
+        }
+
+        .search-box i {
             position: absolute;
-            top: -8px;
-            right: -8px;
-            background-color: var(--secondary);
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray);
+        }
+
+        .notification {
+            position: relative;
+            font-size: 1.3rem;
+            color: var(--primary);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: var(--danger);
             color: white;
             border-radius: 50%;
             width: 18px;
             height: 18px;
-            font-size: 12px;
+            font-size: 0.7rem;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
         }
 
         .mobile-menu-btn {
             display: none;
             background: none;
             border: none;
-            color: white;
-            font-size: 24px;
+            font-size: 1.5rem;
+            color: var(--primary);
             cursor: pointer;
         }
 
-        /* Hero Section */
-        .hero {
-            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('https://images.unsplash.com/photo-1549298916-b41d501d3772?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1200&q=80');
-            background-size: cover;
-            background-position: center;
-            color: white;
-            padding: 100px 0;
-            text-align: center;
-        }
-
-        .hero h1 {
-            font-size: 48px;
-            margin-bottom: 20px;
-            text-shadow: 2px 2px 5px rgba(0,0,0,0.5);
-        }
-
-        .hero p {
-            font-size: 20px;
-            margin-bottom: 30px;
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .btn {
-            display: inline-block;
-            background-color: var(--secondary);
-            color: white;
-            padding: 12px 30px;
-            border-radius: 5px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s;
-            border: none;
-            cursor: pointer;
-        }
-
-        .btn:hover {
-            background-color: #c0392b;
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .btn-outline {
-            background-color: transparent;
-            border: 2px solid white;
-            margin-left: 10px;
-        }
-
-        .btn-outline:hover {
-            background-color: white;
-            color: var(--primary);
-        }
-
-        /* Products Section */
-        .section-title {
-            text-align: center;
-            margin: 60px 0 40px;
-            position: relative;
-        }
-
-        .section-title h2 {
-            font-size: 36px;
-            color: var(--primary);
-            display: inline-block;
-            padding-bottom: 10px;
-        }
-
-        .section-title h2::after {
-            content: '';
-            position: absolute;
-            width: 100px;
-            height: 3px;
-            background-color: var(--accent);
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        .products-grid {
+        /* Stats Cards */
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 30px;
-            margin-bottom: 60px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
         }
 
-        .product-card {
-            background-color: white;
+        .stat-card {
+            background: white;
             border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .product-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
-        }
-
-        .product-image {
-            height: 200px;
-            overflow: hidden;
-        }
-
-        .product-image img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transition: transform 0.5s;
-        }
-
-        .product-card:hover .product-image img {
-            transform: scale(1.05);
-        }
-
-        .product-info {
-            padding: 20px;
-        }
-
-        .product-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: var(--primary);
-        }
-
-        .product-description {
-            color: var(--gray);
-            font-size: 14px;
-            margin-bottom: 15px;
-        }
-
-        .product-price {
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            gap: 20px;
+            transition: transform 0.3s;
         }
 
-        .price {
-            font-size: 22px;
-            font-weight: 700;
-            color: var(--secondary);
+        .stat-card:hover {
+            transform: translateY(-5px);
         }
 
-        .original-price {
-            font-size: 16px;
-            color: var(--gray);
-            text-decoration: line-through;
-            margin-right: 10px;
-        }
-
-        .add-to-cart {
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            font-weight: 500;
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 100%;
+            font-size: 1.8rem;
+            color: white;
         }
 
-        .add-to-cart:hover {
-            background-color: #1a252f;
+        .stat-icon.sales { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .stat-icon.profit { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stat-icon.stock { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stat-icon.customers { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+
+        .stat-info h3 {
+            font-size: 2rem;
+            color: var(--dark);
+            margin-bottom: 5px;
         }
 
-        .add-to-cart i {
-            margin-right: 8px;
+        .stat-info p {
+            color: var(--gray);
+            font-size: 0.9rem;
         }
 
-        /* Cart Modal */
-        .cart-modal {
+        .stat-change {
+            margin-top: 5px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stat-change.positive { color: var(--success); }
+        .stat-change.negative { color: var(--danger); }
+
+        /* Charts Section */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-header h3 {
+            color: var(--primary);
+            font-size: 1.2rem;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        /* Products Management */
+        .products-section {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .section-header h2 {
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: #283593;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: var(--success);
+        }
+
+        .btn-success:hover {
+            background: #388e3c;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+        }
+
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+
+        /* Modal */
+        .modal {
             display: none;
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.5);
             z-index: 2000;
-            justify-content: flex-end;
+            align-items: center;
+            justify-content: center;
         }
 
-        .cart-content {
-            width: 100%;
-            max-width: 450px;
-            height: 100%;
-            background-color: white;
-            padding: 30px;
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
             overflow-y: auto;
-            position: relative;
         }
 
-        .cart-header {
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #eee;
         }
 
-        .cart-header h2 {
+        .modal-header h3 {
             color: var(--primary);
         }
 
-        .close-cart {
+        .close-modal {
             background: none;
             border: none;
-            font-size: 24px;
+            font-size: 1.5rem;
             cursor: pointer;
             color: var(--gray);
         }
 
-        .cart-items {
-            margin-bottom: 30px;
+        .modal-body {
+            padding: 20px;
         }
 
-        .cart-item {
+        /* Forms */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--dark);
+            font-weight: 600;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .image-upload {
+            border: 2px dashed #ddd;
+            border-radius: 5px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .image-upload:hover {
+            border-color: var(--primary);
+            background: rgba(26, 35, 126, 0.02);
+        }
+
+        .image-upload i {
+            font-size: 3rem;
+            color: var(--gray);
+            margin-bottom: 10px;
+        }
+
+        .image-upload input {
+            display: none;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            max-height: 200px;
+            margin-top: 15px;
+            display: none;
+            border-radius: 5px;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            border-top: 1px solid #eee;
             display: flex;
-            align-items: center;
-            padding: 15px 0;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* Table */
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
             border-bottom: 1px solid #eee;
         }
 
-        .cart-item-image {
-            width: 80px;
-            height: 80px;
-            border-radius: 5px;
-            overflow: hidden;
-            margin-right: 15px;
+        th {
+            background: #f8f9fa;
+            color: var(--primary);
+            font-weight: 600;
         }
 
-        .cart-item-image img {
-            width: 100%;
-            height: 100%;
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .product-image {
+            width: 50px;
+            height: 50px;
+            border-radius: 5px;
             object-fit: cover;
         }
 
-        .cart-item-details {
-            flex: 1;
-        }
-
-        .cart-item-title {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .cart-item-price {
-            color: var(--secondary);
+        .badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
             font-weight: 600;
         }
 
-        .cart-item-quantity {
-            display: flex;
-            align-items: center;
-            margin-top: 8px;
+        .badge-success {
+            background: #e8f5e9;
+            color: var(--success);
         }
 
-        .quantity-btn {
-            width: 25px;
-            height: 25px;
-            background-color: #f1f1f1;
+        .badge-warning {
+            background: #fff3e0;
+            color: var(--warning);
+        }
+
+        .badge-danger {
+            background: #ffebee;
+            color: var(--danger);
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            padding: 5px 10px;
             border: none;
             border-radius: 3px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            font-size: 0.9rem;
+            transition: all 0.3s;
         }
 
-        .quantity-input {
-            width: 40px;
-            text-align: center;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-            margin: 0 5px;
-            padding: 3px;
+        .action-btn.edit {
+            background: #e3f2fd;
+            color: var(--accent);
         }
 
-        .remove-item {
-            background: none;
-            border: none;
-            color: var(--secondary);
-            cursor: pointer;
-            font-size: 14px;
-            margin-left: 15px;
+        .action-btn.delete {
+            background: #ffebee;
+            color: var(--danger);
         }
 
-        .cart-summary {
-            background-color: #f9f9f9;
-            padding: 20px;
+        .action-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Finance Section */
+        .finance-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .finance-card {
+            background: white;
             border-radius: 10px;
-            margin-top: 30px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
         }
 
-        .summary-row {
+        .finance-card h3 {
+            color: var(--primary);
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+        }
+
+        .finance-item {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
-        }
-
-        .summary-row.total {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--primary);
-            border-top: 1px solid #ddd;
-            padding-top: 15px;
-            margin-top: 15px;
-        }
-
-        .checkout-btn {
-            width: 100%;
-            margin-top: 20px;
-            padding: 15px;
-            font-size: 18px;
-        }
-
-        /* WhatsApp Button */
-        .whatsapp-float {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background-color: #25D366;
-            color: white;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            display: flex;
-            justify-content: center;
             align-items: center;
-            font-size: 30px;
-            box-shadow: 0 4px 20px rgba(37, 211, 102, 0.5);
-            z-index: 100;
-            transition: all 0.3s;
-            text-decoration: none;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
         }
 
-        .whatsapp-float:hover {
-            background-color: #128C7E;
-            transform: scale(1.1);
+        .finance-item:last-child {
+            border-bottom: none;
         }
 
-        /* Location Section */
-        .location {
-            background-color: var(--light);
-            padding: 80px 0;
-            text-align: center;
+        .finance-label {
+            color: var(--gray);
         }
 
-        .location h2 {
-            color: var(--primary);
-            margin-bottom: 20px;
+        .finance-value {
+            font-weight: 600;
+            color: var(--dark);
         }
 
-        .location p {
-            font-size: 18px;
-            margin-bottom: 30px;
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
+        .finance-value.positive {
+            color: var(--success);
         }
 
-        .location-details {
-            background-color: white;
-            padding: 30px;
+        .finance-value.negative {
+            color: var(--danger);
+        }
+
+        /* Stock Analysis */
+        .stock-analysis {
+            background: white;
             border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-            max-width: 700px;
-            margin: 0 auto;
-            text-align: left;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
         }
 
-        .location-details i {
-            color: var(--accent);
-            margin-right: 10px;
-            width: 20px;
+        /* Orders Section */
+        .orders-section {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
         }
 
-        .location-details p {
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
+        /* Customers Section */
+        .customers-section {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
         }
 
-        /* Footer */
-        footer {
-            background-color: var(--primary);
-            color: white;
-            padding: 60px 0 30px;
+        /* Reports Section */
+        .reports-section {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
         }
 
-        .footer-content {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 40px;
-            margin-bottom: 40px;
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
         }
 
-        .footer-section h3 {
-            font-size: 20px;
+        .empty-state i {
+            font-size: 4rem;
+            color: #e0e0e0;
             margin-bottom: 20px;
-            color: var(--accent);
         }
 
-        .footer-section p {
-            margin-bottom: 15px;
-            opacity: 0.8;
-        }
-
-        .footer-section ul {
-            list-style: none;
-        }
-
-        .footer-section ul li {
+        .empty-state h3 {
+            color: var(--gray);
             margin-bottom: 10px;
         }
 
-        .footer-section ul li a {
-            color: white;
-            text-decoration: none;
-            opacity: 0.8;
-            transition: opacity 0.3s;
+        .empty-state p {
+            color: var(--gray);
+            margin-bottom: 20px;
         }
 
-        .footer-section ul li a:hover {
-            opacity: 1;
-            color: var(--accent);
-        }
-
-        .social-icons {
-            display: flex;
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .social-icons a {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 40px;
-            height: 40px;
-            background-color: rgba(255,255,255,0.1);
-            border-radius: 50%;
-            color: white;
-            text-decoration: none;
-            transition: all 0.3s;
-        }
-
-        .social-icons a:hover {
-            background-color: var(--accent);
-            transform: translateY(-5px);
-        }
-
-        .copyright {
-            text-align: center;
-            padding-top: 30px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            opacity: 0.7;
-            font-size: 14px;
-        }
-
-        /* Notification */
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background-color: #2ecc71;
-            color: white;
-            padding: 15px 25px;
-            border-radius: 5px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            z-index: 3000;
-            display: none;
-            animation: slideIn 0.5s ease;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* Responsive Design */
+        /* Mobile Responsiveness */
         @media (max-width: 992px) {
-            .hero h1 {
-                font-size: 36px;
+            .sidebar {
+                transform: translateX(-100%);
             }
             
-            .hero p {
-                font-size: 18px;
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+            }
+            
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
             }
         }
 
         @media (max-width: 768px) {
-            nav ul {
-                display: none;
-                position: absolute;
-                top: 70px;
-                left: 0;
-                width: 100%;
-                background-color: var(--primary);
-                flex-direction: column;
-                padding: 20px;
-                box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-            }
-
-            nav ul.show {
-                display: flex;
-            }
-
-            nav ul li {
-                margin: 10px 0;
-            }
-
-            .mobile-menu-btn {
-                display: block;
-            }
-
-            .hero {
-                padding: 80px 0;
-            }
-
-            .hero h1 {
-                font-size: 30px;
-            }
-
-            .hero p {
-                font-size: 16px;
-            }
-
-            .section-title h2 {
-                font-size: 28px;
-            }
-
-            .cart-content {
-                max-width: 100%;
-            }
-
-            .whatsapp-float {
-                bottom: 20px;
-                right: 20px;
-                width: 50px;
-                height: 50px;
-                font-size: 24px;
-            }
-        }
-
-        @media (max-width: 576px) {
-            .products-grid {
+            .stats-grid {
                 grid-template-columns: 1fr;
             }
-
-            .btn {
-                padding: 10px 20px;
-                font-size: 14px;
+            
+            .finance-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header-right {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .search-box input {
+                width: 200px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <header>
-        <div class="container header-container">
-            <a href="#" class="logo">
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
                 <i class="fas fa-shoe-prints"></i>
-                Karanja <span>Shoe Store</span>
+                <h2>Karanja<span>Shoe</span></h2>
+            </div>
+        </div>
+        
+        <div class="admin-info">
+            <img src="https://ui-avatars.com/api/?name=Admin+Karanja&background=ff5722&color=fff&size=128" alt="Admin">
+            <h4>Admin Karanja</h4>
+            <p>Store Owner</p>
+        </div>
+        
+        <div class="nav-menu">
+            <a href="#" class="nav-item active" data-section="dashboard">
+                <i class="fas fa-tachometer-alt"></i>
+                <span>Dashboard</span>
             </a>
-            
-            <button class="mobile-menu-btn" id="mobileMenuBtn">
-                <i class="fas fa-bars"></i>
-            </button>
-            
-            <nav>
-                <ul id="navMenu">
-                    <li><a href="#"><i class="fas fa-home"></i> Home</a></li>
-                    <li><a href="#products"><i class="fas fa-shopping-bag"></i> Products</a></li>
-                    <li><a href="#location"><i class="fas fa-map-marker-alt"></i> Location</a></li>
-                    <li><a href="#" class="cart-icon" id="cartIcon">
-                        <i class="fas fa-shopping-cart"></i>
-                        <span class="cart-count" id="cartCount">0</span>
-                    </a></li>
-                    <li><a href="/admin" target="_blank"><i class="fas fa-lock"></i> Admin</a></li>
-                </ul>
-            </nav>
+            <a href="#" class="nav-item" data-section="products">
+                <i class="fas fa-shopping-bag"></i>
+                <span>Products</span>
+            </a>
+            <a href="#" class="nav-item" data-section="finance">
+                <i class="fas fa-chart-line"></i>
+                <span>Finance</span>
+            </a>
+            <a href="#" class="nav-item" data-section="stock">
+                <i class="fas fa-boxes"></i>
+                <span>Stock Analysis</span>
+            </a>
+            <a href="#" class="nav-item" data-section="orders">
+                <i class="fas fa-shopping-cart"></i>
+                <span>Orders</span>
+            </a>
+            <a href="#" class="nav-item" data-section="customers">
+                <i class="fas fa-users"></i>
+                <span>Customers</span>
+            </a>
+            <a href="#" class="nav-item" data-section="reports">
+                <i class="fas fa-file-alt"></i>
+                <span>Reports</span>
+            </a>
         </div>
-    </header>
-
-    <!-- Hero Section -->
-    <section class="hero">
-        <div class="container">
-            <h1>Step Into Style & Comfort</h1>
-            <p>Discover the perfect pair of shoes for every occasion. From casual sneakers to formal wear, we have quality footwear for men, women, and children.</p>
-            <a href="#products" class="btn">Shop Now</a>
-            <a href="#location" class="btn btn-outline">Visit Store</a>
+        
+        <div class="logout">
+            <a href="#" class="nav-item" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </a>
         </div>
-    </section>
+    </div>
 
-    <!-- Products Section -->
-    <section id="products">
-        <div class="container">
-            <div class="section-title">
-                <h2>Our Featured Products</h2>
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+            <div>
+                <button class="mobile-menu-btn" id="mobileMenuBtn">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 id="pageTitle">Admin Dashboard</h1>
             </div>
             
-            <div class="products-grid" id="productsGrid">
-                <!-- Products will be loaded dynamically from JavaScript -->
+            <div class="header-right">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="globalSearch" placeholder="Search products, orders...">
+                </div>
+                
+                <div class="notification" id="notificationBtn">
+                    <i class="fas fa-bell"></i>
+                    <span class="notification-badge" id="notificationCount">0</span>
+                </div>
+                
+                <div class="date-time">
+                    <span id="currentDateTime"></span>
+                </div>
             </div>
         </div>
-    </section>
 
-    <!-- Location Section -->
-    <section id="location" class="location">
-        <div class="container">
-            <h2>Visit Our Store</h2>
-            <p>Experience our premium collection in person at our physical store. Our friendly staff will help you find the perfect fit.</p>
-            
-            <div class="location-details">
-                <p><i class="fas fa-map-marker-alt"></i> <strong>Address:</strong> Burnt Forest along Eldoret ~ Nakuru Highway near Coming Soon Supermarket</p>
-                <p><i class="fas fa-clock"></i> <strong>Opening Hours:</strong> Monday - Saturday: 8:00 AM - 7:00 PM, Sunday: 10:00 AM - 5:00 PM</p>
-                <p><i class="fas fa-phone"></i> <strong>Phone:</strong> 0726 539 216</p>
-                <p><i class="fas fa-envelope"></i> <strong>Email:</strong> info@karanjashoestore.com</p>
-            </div>
-        </div>
-    </section>
-
-    <!-- Footer -->
-    <footer>
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <h3>Karanja Shoe Store</h3>
-                    <p>Your one-stop shop for quality footwear in Burnt Forest. We provide comfortable, stylish, and durable shoes for the whole family.</p>
-                    <div class="social-icons">
-                        <a href="#"><i class="fab fa-facebook-f"></i></a>
-                        <a href="#"><i class="fab fa-twitter"></i></a>
-                        <a href="#"><i class="fab fa-instagram"></i></a>
+        <!-- Dashboard Section -->
+        <section id="dashboardSection" class="section">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon sales">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalSales">KSh 0</h3>
+                        <p>Total Sales</p>
+                        <div class="stat-change" id="salesChange">
+                            <span>Add products to see data</span>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="footer-section">
-                    <h3>Quick Links</h3>
-                    <ul>
-                        <li><a href="#">Home</a></li>
-                        <li><a href="#products">Products</a></li>
-                        <li><a href="#location">Location</a></li>
-                        <li><a href="/admin" target="_blank">Admin Panel</a></li>
-                    </ul>
+                <div class="stat-card">
+                    <div class="stat-icon profit">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalProfit">KSh 0</h3>
+                        <p>Net Profit</p>
+                        <div class="stat-change" id="profitChange">
+                            <span>Add products to see data</span>
+                        </div>
+                    </div>
                 </div>
                 
-                <div class="footer-section">
-                    <h3>Contact Info</h3>
-                    <p><i class="fas fa-map-marker-alt"></i> Burnt Forest, Eldoret-Nakuru Highway</p>
-                    <p><i class="fas fa-phone"></i> 0726 539 216</p>
-                    <p><i class="fas fa-envelope"></i> info@karanjashoestore.com</p>
+                <div class="stat-card">
+                    <div class="stat-icon stock">
+                        <i class="fas fa-boxes"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalStock">0</h3>
+                        <p>Total Stock</p>
+                        <div class="stat-change" id="stockChange">
+                            <span>Add products to see data</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon customers">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalCustomers">0</h3>
+                        <p>Total Customers</p>
+                        <div class="stat-change" id="customersChange">
+                            <span>No customers yet</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <div class="copyright">
-                <p>&copy; 2026 Karanja Shoe Store. All Rights Reserved.</p>
-            </div>
-        </div>
-    </footer>
 
-    <!-- Cart Modal -->
-    <div class="cart-modal" id="cartModal">
-        <div class="cart-content">
-            <div class="cart-header">
-                <h2>Your Shopping Cart</h2>
-                <button class="close-cart" id="closeCart">&times;</button>
-            </div>
-            
-            <div class="cart-items" id="cartItems">
-                <!-- Cart items will be loaded here -->
-                <p id="emptyCartMessage" style="text-align: center; padding: 40px 0;">Your cart is empty</p>
-            </div>
-            
-            <div class="cart-summary" id="cartSummary" style="display: none;">
-                <div class="summary-row">
-                    <span>Subtotal:</span>
-                    <span id="cartSubtotal">Ksh 0</span>
-                </div>
-                <div class="summary-row">
-                    <span>Shipping:</span>
-                    <span>Ksh 200</span>
-                </div>
-                <div class="summary-row total">
-                    <span>Total:</span>
-                    <span id="cartTotal">Ksh 0</span>
+            <!-- Charts -->
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Sales Trends</h3>
+                        <select id="salesPeriod" class="form-control" style="width: auto; padding: 5px 10px;">
+                            <option value="7">Last 7 Days</option>
+                            <option value="30">Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="salesChart"></canvas>
+                    </div>
                 </div>
                 
-                <button class="btn checkout-btn" id="checkoutBtn">Proceed to Checkout</button>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3>Stock by Category</h3>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Products Management Section -->
+        <section id="productsSection" class="section" style="display: none;">
+            <div class="products-section">
+                <div class="section-header">
+                    <h2>Products Management</h2>
+                    <div>
+                        <button class="btn" id="addProductBtn">
+                            <i class="fas fa-plus"></i>
+                            Add New Product
+                        </button>
+                        <button class="btn" id="importProducts" style="margin-left: 10px;">
+                            <i class="fas fa-file-import"></i>
+                            Import CSV
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table id="productsTable">
+                        <thead>
+                            <tr>
+                                <th>Image</th>
+                                <th>Product Name</th>
+                                <th>Category</th>
+                                <th>Size</th>
+                                <th>Buy Price</th>
+                                <th>Sell Price</th>
+                                <th>Stock</th>
+                                <th>Profit</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productsTableBody">
+                            <!-- Products will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Finance Section -->
+        <section id="financeSection" class="section" style="display: none;">
+            <div class="finance-grid">
+                <div class="finance-card">
+                    <h3>Financial Overview</h3>
+                    <div class="finance-item">
+                        <span class="finance-label">Total Revenue</span>
+                        <span class="finance-value" id="totalRevenue">KSh 0</span>
+                    </div>
+                    <div class="finance-item">
+                        <span class="finance-label">Cost of Goods</span>
+                        <span class="finance-value" id="totalCost">KSh 0</span>
+                    </div>
+                    <div class="finance-item">
+                        <span class="finance-label">Gross Profit</span>
+                        <span class="finance-value positive" id="grossProfit">KSh 0</span>
+                    </div>
+                    <div class="finance-item">
+                        <span class="finance-label">Profit Margin</span>
+                        <span class="finance-value positive" id="profitMargin">0%</span>
+                    </div>
+                </div>
+                
+                <div class="finance-card">
+                    <h3>Monthly Performance</h3>
+                    <div class="finance-item">
+                        <span class="finance-label">This Month Sales</span>
+                        <span class="finance-value" id="thisMonthSales">KSh 0</span>
+                    </div>
+                    <div class="finance-item">
+                        <span class="finance-label">Last Month Sales</span>
+                        <span class="finance-value" id="lastMonthSales">KSh 0</span>
+                    </div>
+                    <div class="finance-item">
+                        <span class="finance-label">Growth</span>
+                        <span class="finance-value" id="salesGrowth">0%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Monthly Revenue vs Expenses</h3>
+                    <select id="financePeriod" class="form-control" style="width: auto; padding: 5px 10px;">
+                        <option value="6">Last 6 Months</option>
+                        <option value="12">Last 12 Months</option>
+                    </select>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="financeChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stock Analysis Section -->
+        <section id="stockSection" class="section" style="display: none;">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon stock">
+                        <i class="fas fa-box-open"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="lowStockCount">0</h3>
+                        <p>Low Stock Items</p>
+                        <div class="stat-change" id="lowStockStatus">
+                            <span>Add products to see data</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon stock">
+                        <i class="fas fa-truck-loading"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="reorderPercentage">0%</h3>
+                        <p>Stock Reorder Level</p>
+                        <div class="stat-change" id="reorderStatus">
+                            <span>No products to reorder</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon stock">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="stockValue">KSh 0</h3>
+                        <p>Total Stock Value</p>
+                        <div class="stat-change" id="stockValueStatus">
+                            <span>Based on buy price</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Stock Value by Category</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="stockValueChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Stock Turnover Rate</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="turnoverChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Orders Section -->
+        <section id="ordersSection" class="section" style="display: none;">
+            <div class="orders-section">
+                <div class="section-header">
+                    <h2>Order Management</h2>
+                    <div class="empty-state">
+                        <i class="fas fa-shopping-cart"></i>
+                        <h3>No Orders Yet</h3>
+                        <p>When customers place orders, they will appear here</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Customers Section -->
+        <section id="customersSection" class="section" style="display: none;">
+            <div class="customers-section">
+                <div class="section-header">
+                    <h2>Customer Management</h2>
+                    <div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <h3>No Customers Yet</h3>
+                        <p>Customer data will appear here when they register</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reports Section -->
+        <section id="reportsSection" class="section" style="display: none;">
+            <div class="reports-section">
+                <div class="section-header">
+                    <h2>Reports & Analytics</h2>
+                    <button class="btn" id="generateReport">
+                        <i class="fas fa-download"></i>
+                        Generate Report
+                    </button>
+                </div>
+                
+                <div class="empty-state">
+                    <i class="fas fa-chart-line"></i>
+                    <h3>No Reports Generated</h3>
+                    <p>Generate reports to analyze your store performance</p>
+                    <button class="btn" id="generateSampleReport">
+                        <i class="fas fa-chart-bar"></i>
+                        Generate Sample Report
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Add Product Modal -->
+    <div class="modal" id="addProductModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Add New Product</h3>
+                <button class="close-modal" id="closeModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <form id="productForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="productImage">Product Image *</label>
+                        <div class="image-upload" id="imageUpload">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Click to upload product image (Max: 2MB)</p>
+                            <p style="font-size: 0.8rem; color: #666;">Recommended: 500x500 pixels</p>
+                            <input type="file" id="productImage" accept="image/*" required>
+                        </div>
+                        <img id="imagePreview" class="image-preview" src="" alt="Preview">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="productName">Product Name *</label>
+                            <input type="text" id="productName" class="form-control" required placeholder="e.g., Leather Formal Shoes">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="productSKU">SKU/Barcode</label>
+                            <input type="text" id="productSKU" class="form-control" placeholder="Auto-generated if empty">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="productCategory">Category *</label>
+                            <select id="productCategory" class="form-control" required>
+                                <option value="">Select Category</option>
+                                <option value="Official Shoes">Official Shoes</option>
+                                <option value="Sports Shoes">Sports Shoes</option>
+                                <option value="Casual Shoes">Casual Shoes</option>
+                                <option value="Boots">Boots</option>
+                                <option value="Sandals">Sandals</option>
+                                <option value="Sneakers">Sneakers</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="productSize">Size *</label>
+                            <select id="productSize" class="form-control" required>
+                                <option value="">Select Size</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                                <option value="11">11</option>
+                                <option value="12">12</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="buyPrice">Cost Price (KES) *</label>
+                            <input type="number" id="buyPrice" class="form-control" required min="0" step="0.01" placeholder="Price you bought">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="sellPrice">Selling Price (KES) *</label>
+                            <input type="number" id="sellPrice" class="form-control" required min="0" step="0.01" placeholder="Price to sell">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="stockQuantity">Stock Quantity *</label>
+                            <input type="number" id="stockQuantity" class="form-control" required min="0" placeholder="Available stock">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="reorderLevel">Reorder Level</label>
+                            <input type="number" id="reorderLevel" class="form-control" min="0" placeholder="Default: 5">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="productDescription">Description</label>
+                        <textarea id="productDescription" class="form-control" rows="3" placeholder="Product features, material, etc."></textarea>
+                    </div>
+                    
+                    <div class="form-group" id="profitCalculationContainer" style="display: none;">
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid var(--primary);">
+                            <h4 style="margin-bottom: 10px; color: var(--primary);">Profit Analysis</h4>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                <div>
+                                    <p style="font-size: 0.9rem; color: #666;">Profit per unit:</p>
+                                    <p style="font-size: 1.2rem; font-weight: bold;" id="profitPerUnit">KES 0.00</p>
+                                </div>
+                                <div>
+                                    <p style="font-size: 0.9rem; color: #666;">Profit margin:</p>
+                                    <p style="font-size: 1.2rem; font-weight: bold;" id="profitMarginCalc">0%</p>
+                                </div>
+                                <div>
+                                    <p style="font-size: 0.9rem; color: #666;">Total profit potential:</p>
+                                    <p style="font-size: 1.2rem; font-weight: bold;" id="totalProfitPotential">KES 0.00</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-success" id="saveProductBtn">
+                        <i class="fas fa-save"></i>
+                        Save Product
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div class="modal" id="importModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Import Products from CSV</h3>
+                <button class="close-modal" id="closeImportModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Download CSV Template</label>
+                    <a href="#" id="downloadTemplate" class="btn" style="width: 100%; margin-bottom: 20px;">
+                        <i class="fas fa-download"></i>
+                        Download Template
+                    </a>
+                </div>
+                <div class="form-group">
+                    <label>Upload CSV File</label>
+                    <div class="image-upload" id="csvUpload">
+                        <i class="fas fa-file-csv"></i>
+                        <p>Click to upload CSV file</p>
+                        <input type="file" id="csvFile" accept=".csv">
+                    </div>
+                </div>
+                <div id="importPreview" style="margin-top: 20px; display: none;">
+                    <h4>Preview (First 5 rows)</h4>
+                    <div id="previewTable"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" id="cancelImport">Cancel</button>
+                <button type="button" class="btn btn-success" id="processImport" disabled>
+                    <i class="fas fa-upload"></i>
+                    Import Products
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- WhatsApp Button -->
-    <a href="https://wa.me/254726539216?text=Hello%20Karanja%20Shoe%20Store,%20I%20would%20like%20to%20inquire%20about%20your%20products" class="whatsapp-float" target="_blank">
-        <i class="fab fa-whatsapp"></i>
-    </a>
-
-    <!-- Notification -->
-    <div class="notification" id="notification"></div>
-
     <script>
-        // Products data
-        const products = [
-            {
-                id: 1,
-                name: "Men's Running Shoes",
-                description: "Lightweight running shoes with superior cushioning",
-                price: 4500,
-                originalPrice: 5500,
-                image: "https://images.unsplash.com/photo-1549298916-b41d501d3772?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=500&q=80",
-                category: "men"
-            },
-            {
-                id: 2,
-                name: "Women's Casual Sneakers",
-                description: "Comfortable and stylish sneakers for everyday wear",
-                price: 3800,
-                originalPrice: 4500,
-                image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=500&q=80",
-                category: "women"
-            },
-            {
-                id: 3,
-                name: "Men's Formal Shoes",
-                description: "Classic leather formal shoes for business occasions",
-                price: 6200,
-                originalPrice: 7500,
-                image: "https://images.unsplash.com/photo-1595341888016-a392ef81b7de?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=500&q=80",
-                category: "men"
-            },
-            {
-                id: 4,
-                name: "Women's High Heels",
-                description: "Elegant high heels for special occasions",
-                price: 5200,
-                originalPrice: 6500,
-                image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=500&q=80",
-                category: "women"
-            },
-            {
-                id: 5,
-                name: "Kids' School Shoes",
-                description: "Durable and comfortable shoes for school",
-                price: 2800,
-                originalPrice: 3500,
-                image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=500&q=80",
-                category: "kids"
-            },
-            {
-                id: 6,
-                name: "Unisex Sports Sandals",
-                description: "Comfortable sandals for outdoor activities",
-                price: 3200,
-                originalPrice: 4000,
-                image: "https://images.unsplash.com/photo-1560343090-f0409e92791a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=500&q=80",
-                category: "unisex"
-            },
-            {
-                id: 7,
-                name: "Men's Casual Loafers",
-                description: "Comfortable loafers for casual outings",
-                price: 4100,
-                originalPrice: 5000,
-                image: "https://images.unsplash.com/photo-1597045566677-8cf032ed6634?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=500&q=80",
-                category: "men"
-            },
-            {
-                id: 8,
-                name: "Women's Ballet Flats",
-                description: "Stylish and comfortable flats for everyday wear",
-                price: 3500,
-                originalPrice: 4200,
-                image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=500&q=80",
-                category: "women"
-            }
-        ];
-
-        // Cart state
-        let cart = JSON.parse(localStorage.getItem('karanjaCart')) || [];
+        // ==================== DATA STORAGE ====================
+        let products = JSON.parse(localStorage.getItem('karanjaProducts')) || [];
+        let orders = JSON.parse(localStorage.getItem('karanjaOrders')) || [];
+        let customers = JSON.parse(localStorage.getItem('karanjaCustomers')) || [];
+        let notifications = JSON.parse(localStorage.getItem('karanjaNotifications')) || [];
+        let currentProductId = null;
         
-        // DOM Elements
-        const productsGrid = document.getElementById('productsGrid');
-        const cartModal = document.getElementById('cartModal');
-        const cartIcon = document.getElementById('cartIcon');
-        const closeCart = document.getElementById('closeCart');
-        const cartItems = document.getElementById('cartItems');
-        const emptyCartMessage = document.getElementById('emptyCartMessage');
-        const cartSummary = document.getElementById('cartSummary');
-        const cartCount = document.getElementById('cartCount');
-        const cartSubtotal = document.getElementById('cartSubtotal');
-        const cartTotal = document.getElementById('cartTotal');
-        const checkoutBtn = document.getElementById('checkoutBtn');
-        const notification = document.getElementById('notification');
-        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-        const navMenu = document.getElementById('navMenu');
+        // ==================== UTILITY FUNCTIONS ====================
+        function generateSKU() {
+            return 'SKU' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
+        }
         
-        // Render products
-        function renderProducts() {
-            productsGrid.innerHTML = '';
-            
-            products.forEach(product => {
-                const productCard = document.createElement('div');
-                productCard.className = 'product-card';
-                
-                // Check if product is in cart
-                const inCart = cart.find(item => item.id === product.id);
-                
-                productCard.innerHTML = `
-                    <div class="product-image">
-                        <img src="${product.image}" alt="${product.name}">
-                    </div>
-                    <div class="product-info">
-                        <h3 class="product-title">${product.name}</h3>
-                        <p class="product-description">${product.description}</p>
-                        <div class="product-price">
-                            <div>
-                                ${product.originalPrice ? `<span class="original-price">Ksh ${product.originalPrice.toLocaleString()}</span>` : ''}
-                                <span class="price">Ksh ${product.price.toLocaleString()}</span>
-                            </div>
-                            <span class="category">${product.category.toUpperCase()}</span>
-                        </div>
-                        <button class="add-to-cart" data-id="${product.id}" ${inCart ? 'disabled' : ''}>
-                            <i class="fas fa-cart-plus"></i> ${inCart ? 'Added to Cart' : 'Add to Cart'}
-                        </button>
-                    </div>
-                `;
-                
-                productsGrid.appendChild(productCard);
-            });
-            
-            // Add event listeners to Add to Cart buttons
-            document.querySelectorAll('.add-to-cart').forEach(button => {
-                button.addEventListener('click', function() {
-                    const productId = parseInt(this.getAttribute('data-id'));
-                    addToCart(productId);
-                });
+        function formatCurrency(amount) {
+            return 'KSh ' + parseFloat(amount).toLocaleString('en-KE', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
             });
         }
         
-        // Add product to cart
-        function addToCart(productId) {
-            const product = products.find(p => p.id === productId);
+        function showNotification(message, type = 'success') {
+            const notification = {
+                id: Date.now(),
+                message: message,
+                type: type,
+                timestamp: new Date().toISOString(),
+                read: false
+            };
             
-            if (!product) return;
+            notifications.unshift(notification);
+            if (notifications.length > 50) notifications = notifications.slice(0, 50);
+            localStorage.setItem('karanjaNotifications', JSON.stringify(notifications));
+            updateNotificationBadge();
             
-            // Check if product already in cart
-            const existingItem = cart.find(item => item.id === productId);
+            // Show toast notification
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background-color: ${type === 'success' ? '#4caf50' : 
+                                 type === 'warning' ? '#ff9800' : 
+                                 type === 'error' ? '#f44336' : '#2196f3'};
+                color: white;
+                padding: 15px 25px;
+                border-radius: 5px;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+                z-index: 2000;
+                font-weight: 600;
+                animation: slideIn 0.3s ease;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                max-width: 400px;
+            `;
             
-            if (existingItem) {
-                existingItem.quantity += 1;
-            } else {
-                cart.push({
-                    ...product,
-                    quantity: 1
-                });
-            }
+            const icon = type === 'success' ? 'fas fa-check-circle' : 
+                        type === 'warning' ? 'fas fa-exclamation-triangle' : 
+                        type === 'error' ? 'fas fa-times-circle' : 'fas fa-info-circle';
             
-            // Update cart in localStorage
-            localStorage.setItem('karanjaCart', JSON.stringify(cart));
-            
-            // Update cart UI
-            updateCartUI();
-            
-            // Show notification
-            showNotification(`${product.name} added to cart!`);
-            
-            // Update product button
-            const addButton = document.querySelector(`.add-to-cart[data-id="${productId}"]`);
-            if (addButton) {
-                addButton.innerHTML = '<i class="fas fa-cart-plus"></i> Added to Cart';
-                addButton.disabled = true;
-            }
-        }
-        
-        // Update cart UI
-        function updateCartUI() {
-            // Update cart count
-            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-            cartCount.textContent = totalItems;
-            
-            // Update cart items if modal is open
-            if (cartModal.style.display === 'flex') {
-                renderCartItems();
-            }
-        }
-        
-        // Render cart items
-        function renderCartItems() {
-            cartItems.innerHTML = '';
-            
-            if (cart.length === 0) {
-                emptyCartMessage.style.display = 'block';
-                cartSummary.style.display = 'none';
-                return;
-            }
-            
-            emptyCartMessage.style.display = 'none';
-            cartSummary.style.display = 'block';
-            
-            let subtotal = 0;
-            
-            cart.forEach(item => {
-                const itemTotal = item.price * item.quantity;
-                subtotal += itemTotal;
-                
-                const cartItem = document.createElement('div');
-                cartItem.className = 'cart-item';
-                cartItem.innerHTML = `
-                    <div class="cart-item-image">
-                        <img src="${item.image}" alt="${item.name}">
-                    </div>
-                    <div class="cart-item-details">
-                        <div class="cart-item-title">${item.name}</div>
-                        <div class="cart-item-price">Ksh ${item.price.toLocaleString()}</div>
-                        <div class="cart-item-quantity">
-                            <button class="quantity-btn decrease-quantity" data-id="${item.id}">-</button>
-                            <input type="text" class="quantity-input" value="${item.quantity}" data-id="${item.id}">
-                            <button class="quantity-btn increase-quantity" data-id="${item.id}">+</button>
-                            <button class="remove-item" data-id="${item.id}">Remove</button>
-                        </div>
-                    </div>
-                `;
-                
-                cartItems.appendChild(cartItem);
-            });
-            
-            // Update summary
-            const shipping = 200;
-            const total = subtotal + shipping;
-            
-            cartSubtotal.textContent = `Ksh ${subtotal.toLocaleString()}`;
-            cartTotal.textContent = `Ksh ${total.toLocaleString()}`;
-            
-            // Add event listeners to cart controls
-            document.querySelectorAll('.decrease-quantity').forEach(button => {
-                button.addEventListener('click', function() {
-                    const productId = parseInt(this.getAttribute('data-id'));
-                    updateQuantity(productId, -1);
-                });
-            });
-            
-            document.querySelectorAll('.increase-quantity').forEach(button => {
-                button.addEventListener('click', function() {
-                    const productId = parseInt(this.getAttribute('data-id'));
-                    updateQuantity(productId, 1);
-                });
-            });
-            
-            document.querySelectorAll('.quantity-input').forEach(input => {
-                input.addEventListener('change', function() {
-                    const productId = parseInt(this.getAttribute('data-id'));
-                    const newQuantity = parseInt(this.value) || 1;
-                    updateQuantity(productId, 0, newQuantity);
-                });
-            });
-            
-            document.querySelectorAll('.remove-item').forEach(button => {
-                button.addEventListener('click', function() {
-                    const productId = parseInt(this.getAttribute('data-id'));
-                    removeFromCart(productId);
-                });
-            });
-        }
-        
-        // Update item quantity
-        function updateQuantity(productId, change, newQuantity = null) {
-            const itemIndex = cart.findIndex(item => item.id === productId);
-            
-            if (itemIndex === -1) return;
-            
-            if (newQuantity !== null) {
-                cart[itemIndex].quantity = Math.max(1, newQuantity);
-            } else {
-                cart[itemIndex].quantity += change;
-                
-                if (cart[itemIndex].quantity < 1) {
-                    cart.splice(itemIndex, 1);
-                }
-            }
-            
-            // Update localStorage
-            localStorage.setItem('karanjaCart', JSON.stringify(cart));
-            
-            // Update UI
-            updateCartUI();
-            
-            // Update product buttons
-            updateProductButtons();
-        }
-        
-        // Remove item from cart
-        function removeFromCart(productId) {
-            const itemIndex = cart.findIndex(item => item.id === productId);
-            
-            if (itemIndex === -1) return;
-            
-            cart.splice(itemIndex, 1);
-            
-            // Update localStorage
-            localStorage.setItem('karanjaCart', JSON.stringify(cart));
-            
-            // Update UI
-            updateCartUI();
-            
-            // Update product buttons
-            updateProductButtons();
-            
-            // Show notification
-            showNotification('Item removed from cart');
-        }
-        
-        // Update product buttons based on cart
-        function updateProductButtons() {
-            document.querySelectorAll('.add-to-cart').forEach(button => {
-                const productId = parseInt(button.getAttribute('data-id'));
-                const inCart = cart.find(item => item.id === productId);
-                
-                if (inCart) {
-                    button.innerHTML = '<i class="fas fa-cart-plus"></i> Added to Cart';
-                    button.disabled = true;
-                } else {
-                    button.innerHTML = '<i class="fas fa-cart-plus"></i> Add to Cart';
-                    button.disabled = false;
-                }
-            });
-        }
-        
-        // Show notification
-        function showNotification(message) {
-            notification.textContent = message;
-            notification.style.display = 'block';
+            toast.innerHTML = `<i class="${icon}"></i> <span>${message}</span>`;
+            document.body.appendChild(toast);
             
             setTimeout(() => {
-                notification.style.display = 'none';
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    if (toast.parentNode) document.body.removeChild(toast);
+                }, 300);
             }, 3000);
         }
         
-        // Checkout process
-        function checkout() {
-            if (cart.length === 0) {
-                showNotification('Your cart is empty!');
+        function updateNotificationBadge() {
+            const unreadCount = notifications.filter(n => !n.read).length;
+            document.getElementById('notificationCount').textContent = unreadCount;
+        }
+        
+        // ==================== DATE & TIME ====================
+        function updateDateTime() {
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            };
+            document.getElementById('currentDateTime').textContent = now.toLocaleDateString('en-KE', options);
+        }
+        
+        updateDateTime();
+        setInterval(updateDateTime, 1000);
+        
+        // ==================== NAVIGATION ====================
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+                this.classList.add('active');
+                
+                const section = this.getAttribute('data-section');
+                const pageTitle = this.querySelector('span').textContent;
+                
+                document.getElementById('pageTitle').textContent = pageTitle;
+                document.querySelectorAll('.section').forEach(sec => sec.style.display = 'none');
+                document.getElementById(section + 'Section').style.display = 'block';
+                
+                if (window.innerWidth <= 992) {
+                    document.getElementById('sidebar').classList.remove('active');
+                }
+                
+                // Refresh data for current section
+                switch(section) {
+                    case 'dashboard':
+                        loadDashboardData();
+                        break;
+                    case 'products':
+                        loadProductsTable();
+                        break;
+                    case 'finance':
+                        loadFinanceData();
+                        break;
+                    case 'stock':
+                        loadStockAnalysis();
+                        break;
+                }
+            });
+        });
+        
+        // ==================== PRODUCT MANAGEMENT ====================
+        function loadProductsTable() {
+            const tableBody = document.getElementById('productsTableBody');
+            const searchTerm = document.getElementById('globalSearch').value.toLowerCase();
+            
+            let filteredProducts = products;
+            if (searchTerm) {
+                filteredProducts = products.filter(p => 
+                    p.name.toLowerCase().includes(searchTerm) ||
+                    p.category.toLowerCase().includes(searchTerm) ||
+                    p.sku?.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            if (filteredProducts.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="10" style="text-align: center; padding: 40px;">
+                            <i class="fas fa-box-open" style="font-size: 3rem; color: #ccc; margin-bottom: 10px;"></i>
+                            <h3 style="color: #666; margin-bottom: 10px;">No Products Found</h3>
+                            <p style="color: #888;">${searchTerm ? 'No products match your search' : 'Click "Add New Product" to get started'}</p>
+                        </td>
+                    </tr>
+                `;
                 return;
             }
             
-            // Calculate total
-            const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            const shipping = 200;
-            const total = subtotal + shipping;
-            
-            // Create order summary
-            let orderSummary = `Order Summary:\n`;
-            cart.forEach(item => {
-                orderSummary += `${item.name} x ${item.quantity}: Ksh ${(item.price * item.quantity).toLocaleString()}\n`;
+            tableBody.innerHTML = '';
+            filteredProducts.forEach((product, index) => {
+                const profit = product.sellPrice - product.buyPrice;
+                const profitMargin = product.buyPrice > 0 ? ((profit / product.buyPrice) * 100).toFixed(1) : 0;
+                const totalProfitPotential = profit * product.stockQuantity;
+                
+                let status = '';
+                let statusClass = '';
+                
+                if (product.stockQuantity <= 0) {
+                    status = 'Out of Stock';
+                    statusClass = 'badge-danger';
+                } else if (product.stockQuantity <= (product.reorderLevel || 5)) {
+                    status = 'Low Stock';
+                    statusClass = 'badge-warning';
+                } else {
+                    status = 'In Stock';
+                    statusClass = 'badge-success';
+                }
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        <img src="${product.image || 'https://via.placeholder.com/50'}" 
+                             alt="${product.name}" 
+                             class="product-image">
+                    </td>
+                    <td>
+                        <strong>${product.name}</strong>
+                        ${product.sku ? `<br><small style="color: #666;">${product.sku}</small>` : ''}
+                    </td>
+                    <td>${product.category}</td>
+                    <td>${product.size}</td>
+                    <td>${formatCurrency(product.buyPrice)}</td>
+                    <td>${formatCurrency(product.sellPrice)}</td>
+                    <td>${product.stockQuantity}</td>
+                    <td>
+                        <span style="color: ${profit >= 0 ? '#4caf50' : '#f44336'}">
+                            ${formatCurrency(profit)}<br>
+                            <small>(${profitMargin}%)</small>
+                        </span>
+                    </td>
+                    <td><span class="badge ${statusClass}">${status}</span></td>
+                    <td>
+                        <div class="actions">
+                            <button class="action-btn edit" onclick="editProduct(${product.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-btn delete" onclick="deleteProduct(${product.id})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
             });
-            orderSummary += `\nSubtotal: Ksh ${subtotal.toLocaleString()}\n`;
-            orderSummary += `Shipping: Ksh ${shipping.toLocaleString()}\n`;
-            orderSummary += `Total: Ksh ${total.toLocaleString()}\n\n`;
-            orderSummary += `Customer Name: [Please enter your name]\n`;
-            orderSummary += `Phone: [Please enter your phone number]\n`;
-            orderSummary += `Delivery Address: [Please enter your address]\n`;
-            orderSummary += `Payment Method: Cash on Delivery`;
-            
-            // In a real implementation, you would send this to your backend
-            // For now, we'll show an alert and simulate order placement
-            alert(`Order placed successfully!\n\n${orderSummary}\n\nOur team will contact you shortly to confirm your order.`);
-            
-            // Clear cart
-            cart = [];
-            localStorage.setItem('karanjaCart', JSON.stringify(cart));
-            updateCartUI();
-            updateProductButtons();
-            
-            // Close cart modal
-            cartModal.style.display = 'none';
-            
-            // Show success notification
-            showNotification('Order placed successfully! We will contact you soon.');
         }
         
-        // Initialize
-        function init() {
-            renderProducts();
-            updateCartUI();
+        function editProduct(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
             
-            // Event Listeners
-            cartIcon.addEventListener('click', () => {
-                cartModal.style.display = 'flex';
-                renderCartItems();
+            currentProductId = productId;
+            document.getElementById('modalTitle').textContent = 'Edit Product';
+            document.getElementById('productName').value = product.name;
+            document.getElementById('productSKU').value = product.sku || '';
+            document.getElementById('productCategory').value = product.category;
+            document.getElementById('productSize').value = product.size;
+            document.getElementById('buyPrice').value = product.buyPrice;
+            document.getElementById('sellPrice').value = product.sellPrice;
+            document.getElementById('stockQuantity').value = product.stockQuantity;
+            document.getElementById('reorderLevel').value = product.reorderLevel || 5;
+            document.getElementById('productDescription').value = product.description || '';
+            
+            if (product.image && product.image !== 'https://via.placeholder.com/150') {
+                document.getElementById('imagePreview').src = product.image;
+                document.getElementById('imagePreview').style.display = 'block';
+            }
+            
+            calculateProfit();
+            document.getElementById('addProductModal').classList.add('active');
+        }
+        
+        function deleteProduct(productId) {
+            if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+                return;
+            }
+            
+            const index = products.findIndex(p => p.id === productId);
+            if (index !== -1) {
+                const productName = products[index].name;
+                products.splice(index, 1);
+                localStorage.setItem('karanjaProducts', JSON.stringify(products));
+                loadProductsTable();
+                updateAllCharts();
+                showNotification(`"${productName}" has been deleted`, 'success');
+            }
+        }
+        
+        // ==================== DASHBOARD DATA ====================
+        function loadDashboardData() {
+            if (products.length === 0) {
+                // Reset to zeros
+                document.getElementById('totalSales').textContent = 'KSh 0';
+                document.getElementById('totalProfit').textContent = 'KSh 0';
+                document.getElementById('totalStock').textContent = '0';
+                document.getElementById('totalCustomers').textContent = '0';
+                
+                document.querySelectorAll('.stat-change').forEach(el => {
+                    el.className = 'stat-change';
+                    el.innerHTML = '<span>Add products to see data</span>';
+                });
+                
+                // Empty charts
+                updateChartsWithEmptyData();
+                return;
+            }
+            
+            // Calculate totals
+            let totalRevenue = 0;
+            let totalCost = 0;
+            let totalStock = 0;
+            let totalStockValue = 0;
+            
+            products.forEach(product => {
+                totalStock += product.stockQuantity;
+                totalStockValue += product.buyPrice * product.stockQuantity;
             });
             
-            closeCart.addEventListener('click', () => {
-                cartModal.style.display = 'none';
-            });
+            const grossProfit = totalRevenue - totalCost;
+            const profitMargin = totalCost > 0 ? (grossProfit / totalCost * 100).toFixed(1) : 0;
             
-            // Close cart when clicking outside
-            cartModal.addEventListener('click', (e) => {
-                if (e.target === cartModal) {
-                    cartModal.style.display = 'none';
+            // Update UI
+            document.getElementById('totalSales').textContent = formatCurrency(totalRevenue);
+            document.getElementById('totalProfit').textContent = formatCurrency(grossProfit);
+            document.getElementById('totalStock').textContent = totalStock;
+            document.getElementById('totalCustomers').textContent = customers.length;
+            
+            // Update change indicators
+            updateChangeIndicators();
+            
+            // Update charts
+            updateChartsWithRealData();
+        }
+        
+        function updateChangeIndicators() {
+            // This would normally compare with previous period
+            // For now, show static indicators
+            document.getElementById('salesChange').innerHTML = '<span class="positive"><i class="fas fa-arrow-up"></i> Add sales data</span>';
+            document.getElementById('profitChange').innerHTML = '<span class="positive"><i class="fas fa-arrow-up"></i> Based on current stock</span>';
+            document.getElementById('stockChange').innerHTML = '<span>Total available items</span>';
+        }
+        
+        // ==================== CHARTS ====================
+        let salesChart, categoryChart, financeChart, stockValueChart, turnoverChart;
+        
+        function initializeCharts() {
+            // Sales Chart
+            const salesCtx = document.getElementById('salesChart').getContext('2d');
+            salesChart = new Chart(salesCtx, {
+                type: 'line',
+                data: {
+                    labels: ['No Data'],
+                    datasets: [{
+                        label: 'Sales (KES)',
+                        data: [0],
+                        borderColor: '#2196f3',
+                        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'KSh ' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true
+                        }
+                    }
                 }
             });
             
-            checkoutBtn.addEventListener('click', checkout);
-            
-            // Mobile menu toggle
-            mobileMenuBtn.addEventListener('click', () => {
-                navMenu.classList.toggle('show');
+            // Category Chart
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+            categoryChart = new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['No Data'],
+                    datasets: [{
+                        data: [1],
+                        backgroundColor: ['#e0e0e0']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
             });
             
-            // Close mobile menu when clicking a link
-            document.querySelectorAll('#navMenu a').forEach(link => {
-                link.addEventListener('click', () => {
-                    navMenu.classList.remove('show');
-                });
+            // Finance Chart
+            const financeCtx = document.getElementById('financeChart').getContext('2d');
+            financeChart = new Chart(financeCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['No Data'],
+                    datasets: [{
+                        label: 'Revenue',
+                        data: [0],
+                        backgroundColor: '#4caf50'
+                    }, {
+                        label: 'Expenses',
+                        data: [0],
+                        backgroundColor: '#f44336'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'KSh ' + (value / 1000) + 'k';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Stock Value Chart
+            const stockCtx = document.getElementById('stockValueChart').getContext('2d');
+            stockValueChart = new Chart(stockCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['No Data'],
+                    datasets: [{
+                        label: 'Stock Value (KES)',
+                        data: [0],
+                        backgroundColor: '#ff5722'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'KSh ' + (value / 1000) + 'k';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Turnover Chart
+            const turnoverCtx = document.getElementById('turnoverChart').getContext('2d');
+            turnoverChart = new Chart(turnoverCtx, {
+                type: 'line',
+                data: {
+                    labels: ['No Data'],
+                    datasets: [{
+                        label: 'Turnover Rate',
+                        data: [0],
+                        borderColor: '#9c27b0',
+                        backgroundColor: 'rgba(156, 39, 176, 0.1)',
+                        borderWidth: 2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
             });
         }
         
-        // Initialize the app
-        document.addEventListener('DOMContentLoaded', init);
+        function updateChartsWithEmptyData() {
+            // Update all charts to show empty state
+            salesChart.data.labels = ['No Data'];
+            salesChart.data.datasets[0].data = [0];
+            salesChart.update();
+            
+            categoryChart.data.labels = ['No Data'];
+            categoryChart.data.datasets[0].data = [1];
+            categoryChart.data.datasets[0].backgroundColor = ['#e0e0e0'];
+            categoryChart.update();
+            
+            financeChart.data.labels = ['No Data'];
+            financeChart.data.datasets[0].data = [0];
+            financeChart.data.datasets[1].data = [0];
+            financeChart.update();
+            
+            stockValueChart.data.labels = ['No Data'];
+            stockValueChart.data.datasets[0].data = [0];
+            stockValueChart.update();
+            
+            turnoverChart.data.labels = ['No Data'];
+            turnoverChart.data.datasets[0].data = [0];
+            turnoverChart.update();
+        }
+        
+        function updateChartsWithRealData() {
+            // Category distribution
+            const categories = {};
+            products.forEach(p => {
+                categories[p.category] = (categories[p.category] || 0) + p.stockQuantity;
+            });
+            
+            const categoryLabels = Object.keys(categories);
+            const categoryData = Object.values(categories);
+            const categoryColors = ['#1a237e', '#2196f3', '#4caf50', '#ff9800', '#9c27b0', '#ff5722'];
+            
+            categoryChart.data.labels = categoryLabels;
+            categoryChart.data.datasets[0].data = categoryData;
+            categoryChart.data.datasets[0].backgroundColor = categoryColors.slice(0, categoryLabels.length);
+            categoryChart.update();
+            
+            // Stock value by category
+            const stockValues = {};
+            products.forEach(p => {
+                stockValues[p.category] = (stockValues[p.category] || 0) + (p.buyPrice * p.stockQuantity);
+            });
+            
+            stockValueChart.data.labels = Object.keys(stockValues);
+            stockValueChart.data.datasets[0].data = Object.values(stockValues);
+            stockValueChart.update();
+            
+            // Generate sample sales data for last 7 days
+            const today = new Date();
+            const last7Days = [];
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(today);
+                date.setDate(date.getDate() - i);
+                last7Days.push(date.toLocaleDateString('en-KE', { weekday: 'short' }));
+            }
+            
+            // Generate random sales data based on products
+            const salesData = last7Days.map(() => {
+                return products.length > 0 ? 
+                    Math.floor(Math.random() * products.length * 10000) : 0;
+            });
+            
+            salesChart.data.labels = last7Days;
+            salesChart.data.datasets[0].data = salesData;
+            salesChart.update();
+            
+            // Monthly data for finance chart
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+            const revenueData = months.map(() => {
+                return products.length > 0 ? 
+                    Math.floor(Math.random() * products.length * 50000) : 0;
+            });
+            const expenseData = revenueData.map(rev => Math.floor(rev * 0.6));
+            
+            financeChart.data.labels = months;
+            financeChart.data.datasets[0].data = revenueData;
+            financeChart.data.datasets[1].data = expenseData;
+            financeChart.update();
+            
+            // Turnover rate (sample data)
+            const turnoverMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+            const turnoverData = turnoverMonths.map(() => (Math.random() * 2).toFixed(1));
+            
+            turnoverChart.data.labels = turnoverMonths;
+            turnoverChart.data.datasets[0].data = turnoverData;
+            turnoverChart.update();
+        }
+        
+        function updateAllCharts() {
+            if (products.length === 0) {
+                updateChartsWithEmptyData();
+            } else {
+                updateChartsWithRealData();
+            }
+        }
+        
+        // ==================== FINANCE DATA ====================
+        function loadFinanceData() {
+            if (products.length === 0) {
+                document.getElementById('totalRevenue').textContent = 'KSh 0';
+                document.getElementById('totalCost').textContent = 'KSh 0';
+                document.getElementById('grossProfit').textContent = 'KSh 0';
+                document.getElementById('profitMargin').textContent = '0%';
+                document.getElementById('thisMonthSales').textContent = 'KSh 0';
+                document.getElementById('lastMonthSales').textContent = 'KSh 0';
+                document.getElementById('salesGrowth').textContent = '0%';
+                document.getElementById('salesGrowth').className = 'finance-value';
+                return;
+            }
+            
+            // Calculate financial metrics
+            let totalStockValue = 0;
+            let totalPotentialRevenue = 0;
+            
+            products.forEach(p => {
+                totalStockValue += p.buyPrice * p.stockQuantity;
+                totalPotentialRevenue += p.sellPrice * p.stockQuantity;
+            });
+            
+            const grossProfit = totalPotentialRevenue - totalStockValue;
+            const profitMargin = totalStockValue > 0 ? (grossProfit / totalStockValue * 100).toFixed(1) : 0;
+            
+            // Update UI
+            document.getElementById('totalRevenue').textContent = formatCurrency(totalPotentialRevenue);
+            document.getElementById('totalCost').textContent = formatCurrency(totalStockValue);
+            document.getElementById('grossProfit').textContent = formatCurrency(grossProfit);
+            document.getElementById('profitMargin').textContent = `${profitMargin}%`;
+            
+            // Sample monthly data
+            const thisMonth = products.length * 15000;
+            const lastMonth = products.length * 12000;
+            const growth = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth * 100).toFixed(1) : 0;
+            
+            document.getElementById('thisMonthSales').textContent = formatCurrency(thisMonth);
+            document.getElementById('lastMonthSales').textContent = formatCurrency(lastMonth);
+            document.getElementById('salesGrowth').textContent = `${growth}%`;
+            document.getElementById('salesGrowth').className = `finance-value ${growth >= 0 ? 'positive' : 'negative'}`;
+        }
+        
+        // ==================== STOCK ANALYSIS ====================
+        function loadStockAnalysis() {
+            if (products.length === 0) {
+                document.getElementById('lowStockCount').textContent = '0';
+                document.getElementById('reorderPercentage').textContent = '0%';
+                document.getElementById('stockValue').textContent = 'KSh 0';
+                document.getElementById('lowStockStatus').innerHTML = '<span>No products added</span>';
+                document.getElementById('reorderStatus').innerHTML = '<span>Add products first</span>';
+                document.getElementById('stockValueStatus').innerHTML = '<span>Based on buy price</span>';
+                return;
+            }
+            
+            let lowStockCount = 0;
+            let totalStockValue = 0;
+            let outOfStockCount = 0;
+            
+            products.forEach(p => {
+                totalStockValue += p.buyPrice * p.stockQuantity;
+                if (p.stockQuantity <= (p.reorderLevel || 5)) {
+                    lowStockCount++;
+                }
+                if (p.stockQuantity <= 0) {
+                    outOfStockCount++;
+                }
+            });
+            
+            const reorderPercentage = Math.round((lowStockCount / products.length) * 100);
+            
+            document.getElementById('lowStockCount').textContent = lowStockCount;
+            document.getElementById('reorderPercentage').textContent = `${reorderPercentage}%`;
+            document.getElementById('stockValue').textContent = formatCurrency(totalStockValue);
+            
+            // Update status messages
+            if (lowStockCount > 0) {
+                document.getElementById('lowStockStatus').innerHTML = 
+                    `<span class="warning"><i class="fas fa-exclamation-triangle"></i> Needs attention</span>`;
+            } else {
+                document.getElementById('lowStockStatus').innerHTML = 
+                    `<span class="positive"><i class="fas fa-check-circle"></i> All stock levels good</span>`;
+            }
+            
+            if (reorderPercentage > 30) {
+                document.getElementById('reorderStatus').innerHTML = 
+                    `<span class="danger"><i class="fas fa-exclamation-circle"></i> High reorder needed</span>`;
+            } else if (reorderPercentage > 10) {
+                document.getElementById('reorderStatus').innerHTML = 
+                    `<span class="warning"><i class="fas fa-info-circle"></i> Monitor stock levels</span>`;
+            } else {
+                document.getElementById('reorderStatus').innerHTML = 
+                    `<span class="positive"><i class="fas fa-thumbs-up"></i> Optimal stock levels</span>`;
+            }
+            
+            document.getElementById('stockValueStatus').innerHTML = 
+                `<span>${products.length} products in inventory</span>`;
+        }
+        
+        // ==================== PRODUCT FORM HANDLING ====================
+        function calculateProfit() {
+            const buyPrice = parseFloat(document.getElementById('buyPrice').value) || 0;
+            const sellPrice = parseFloat(document.getElementById('sellPrice').value) || 0;
+            const stockQuantity = parseInt(document.getElementById('stockQuantity').value) || 0;
+            
+            const profit = sellPrice - buyPrice;
+            const profitMargin = buyPrice > 0 ? ((profit / buyPrice) * 100).toFixed(1) : 0;
+            const totalProfitPotential = profit * stockQuantity;
+            
+            const profitContainer = document.getElementById('profitCalculationContainer');
+            
+            if (buyPrice > 0 && sellPrice > 0) {
+                profitContainer.style.display = 'block';
+                document.getElementById('profitPerUnit').textContent = formatCurrency(profit);
+                document.getElementById('profitMarginCalc').textContent = `${profitMargin}%`;
+                document.getElementById('totalProfitPotential').textContent = formatCurrency(totalProfitPotential);
+                
+                // Color coding
+                document.getElementById('profitPerUnit').style.color = profit >= 0 ? '#4caf50' : '#f44336';
+                document.getElementById('profitMarginCalc').style.color = profitMargin >= 0 ? '#4caf50' : '#f44336';
+                document.getElementById('totalProfitPotential').style.color = totalProfitPotential >= 0 ? '#4caf50' : '#f44336';
+            } else {
+                profitContainer.style.display = 'none';
+            }
+        }
+        
+        // ==================== EVENT LISTENERS ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize everything
+            initializeCharts();
+            loadProductsTable();
+            loadDashboardData();
+            updateNotificationBadge();
+            
+            // Mobile menu
+            document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+                document.getElementById('sidebar').classList.toggle('active');
+            });
+            
+            // Search functionality
+            document.getElementById('globalSearch').addEventListener('input', loadProductsTable);
+            
+            // Product modal
+            document.getElementById('addProductBtn').addEventListener('click', function() {
+                currentProductId = null;
+                document.getElementById('productForm').reset();
+                document.getElementById('imagePreview').style.display = 'none';
+                document.getElementById('modalTitle').textContent = 'Add New Product';
+                document.getElementById('productSKU').value = generateSKU();
+                document.getElementById('addProductModal').classList.add('active');
+                calculateProfit();
+            });
+            
+            // Close modals
+            document.getElementById('closeModal').addEventListener('click', function() {
+                document.getElementById('addProductModal').classList.remove('active');
+            });
+            
+            document.getElementById('cancelBtn').addEventListener('click', function() {
+                document.getElementById('addProductModal').classList.remove('active');
+            });
+            
+            // Close modal on outside click
+            document.getElementById('addProductModal').addEventListener('click', function(e) {
+                if (e.target === this) this.classList.remove('active');
+            });
+            
+            // Image upload
+            document.getElementById('imageUpload').addEventListener('click', function() {
+                document.getElementById('productImage').click();
+            });
+            
+            document.getElementById('productImage').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    if (file.size > 2 * 1024 * 1024) {
+                        showNotification('Image size should be less than 2MB', 'error');
+                        return;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        document.getElementById('imagePreview').src = e.target.result;
+                        document.getElementById('imagePreview').style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+            
+            // Price change listeners
+            document.getElementById('buyPrice').addEventListener('input', calculateProfit);
+            document.getElementById('sellPrice').addEventListener('input', calculateProfit);
+            document.getElementById('stockQuantity').addEventListener('input', calculateProfit);
+            
+            // Form submission
+            document.getElementById('productForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Validation
+                const buyPrice = parseFloat(document.getElementById('buyPrice').value);
+                const sellPrice = parseFloat(document.getElementById('sellPrice').value);
+                
+                if (buyPrice <= 0 || sellPrice <= 0) {
+                    showNotification('Prices must be greater than 0', 'error');
+                    return;
+                }
+                
+                if (sellPrice <= buyPrice) {
+                    if (!confirm('Selling price is less than or equal to cost price. This will result in a loss. Continue?')) {
+                        return;
+                    }
+                }
+                
+                const productData = {
+                    id: currentProductId || Date.now(),
+                    name: document.getElementById('productName').value.trim(),
+                    sku: document.getElementById('productSKU').value.trim() || generateSKU(),
+                    category: document.getElementById('productCategory').value,
+                    size: document.getElementById('productSize').value,
+                    buyPrice: buyPrice,
+                    sellPrice: sellPrice,
+                    stockQuantity: parseInt(document.getElementById('stockQuantity').value) || 0,
+                    reorderLevel: parseInt(document.getElementById('reorderLevel').value) || 5,
+                    description: document.getElementById('productDescription').value.trim(),
+                    image: document.getElementById('imagePreview').src || 'https://via.placeholder.com/150',
+                    dateAdded: new Date().toISOString(),
+                    lastUpdated: new Date().toISOString()
+                };
+                
+                if (currentProductId === null) {
+                    // Add new product
+                    products.push(productData);
+                    showNotification(`"${productData.name}" added successfully!`, 'success');
+                } else {
+                    // Update existing product
+                    const index = products.findIndex(p => p.id === currentProductId);
+                    if (index !== -1) {
+                        productData.dateAdded = products[index].dateAdded; // Preserve original date
+                        products[index] = productData;
+                        showNotification(`"${productData.name}" updated successfully!`, 'success');
+                    }
+                }
+                
+                // Save and update
+                localStorage.setItem('karanjaProducts', JSON.stringify(products));
+                document.getElementById('addProductModal').classList.remove('active');
+                
+                // Refresh all data
+                loadProductsTable();
+                loadDashboardData();
+                loadFinanceData();
+                loadStockAnalysis();
+                updateAllCharts();
+            });
+            
+            // Import CSV functionality
+            document.getElementById('importProducts').addEventListener('click', function() {
+                document.getElementById('importModal').classList.add('active');
+            });
+            
+            document.getElementById('downloadTemplate').addEventListener('click', function(e) {
+                e.preventDefault();
+                const template = `Product Name,Category,Size,Buy Price,Sell Price,Stock Quantity,Reorder Level,Description
+Leather Formal Shoes,Official Shoes,10,2500,4500,20,5,Black leather formal shoes
+Running Shoes,Sports Shoes,9,1800,3200,15,3,Blue running shoes for athletes
+Casual Sneakers,Casual Shoes,8,1200,2200,30,5,White casual sneakers
+Leather Boots,Boots,11,3200,5200,10,2,Brown leather boots for outdoor`;
+                
+                const blob = new Blob([template], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'product_import_template.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showNotification('Template downloaded successfully', 'success');
+            });
+            
+            // Close import modal
+            document.getElementById('closeImportModal').addEventListener('click', function() {
+                document.getElementById('importModal').classList.remove('active');
+            });
+            
+            document.getElementById('cancelImport').addEventListener('click', function() {
+                document.getElementById('importModal').classList.remove('active');
+            });
+            
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', function(e) {
+                e.preventDefault();
+                if (confirm('Are you sure you want to logout?')) {
+                    showNotification('Logged out successfully', 'success');
+                    setTimeout(() => {
+                        window.location.href = 'login.html'; // Redirect to login page
+                    }, 1000);
+                }
+            });
+            
+            // Notification click
+            document.getElementById('notificationBtn').addEventListener('click', function() {
+                const unreadCount = notifications.filter(n => !n.read).length;
+                if (unreadCount > 0) {
+                    notifications.forEach(n => n.read = true);
+                    localStorage.setItem('karanjaNotifications', JSON.stringify(notifications));
+                    updateNotificationBadge();
+                    showNotification('All notifications marked as read', 'success');
+                } else {
+                    showNotification('No new notifications', 'info');
+                }
+            });
+            
+            // Add CSS for animations
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Welcome message
+            setTimeout(() => {
+                if (products.length === 0) {
+                    showNotification('Welcome! Start by adding your first product.', 'info');
+                }
+            }, 1500);
+        });
     </script>
 </body>
-  </html>
+</html>
