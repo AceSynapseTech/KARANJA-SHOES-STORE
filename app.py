@@ -1,6 +1,6 @@
 """
 KARANJA SHOE STORE - COMPLETE FLASK APPLICATION
-Fixed for Render deployment - No permission issues
+Fixed for Render deployment - WITH PROPER TEMPLATE HANDLING
 """
 
 import os
@@ -11,6 +11,7 @@ import datetime
 import hashlib
 import hmac
 import requests
+import traceback
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
@@ -18,112 +19,14 @@ from urllib.parse import quote
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
 from flask_cors import CORS
-from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import pytz
 from dotenv import load_dotenv
 
-# ==================== B2 SDK FIX - NO PKG_RESOURCES ====================
-class B2DirectAPI:
-    """Direct B2 API client - no b2sdk dependency"""
-    
-    def __init__(self, key_id, application_key, bucket_name, bucket_id):
-        self.key_id = key_id
-        self.application_key = application_key
-        self.bucket_name = bucket_name
-        self.bucket_id = bucket_id
-        self.api_url = None
-        self.download_url = None
-        self.authorization_token = None
-        self.authorized = False
-        self._authenticate()
-    
-    def _authenticate(self):
-        """Authenticate with B2 API"""
-        try:
-            auth_string = f"{self.key_id}:{self.application_key}"
-            auth_header = base64.b64encode(auth_string.encode()).decode()
-            
-            response = requests.get(
-                "https://api.backblazeb2.com/b2api/v2/b2_authorize_account",
-                headers={"Authorization": f"Basic {auth_header}"}
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                self.api_url = data['apiUrl']
-                self.download_url = data['downloadUrl']
-                self.authorization_token = data['authorizationToken']
-                self.authorized = True
-                print(f"✅ B2 Authenticated: {self.bucket_name}")
-            else:
-                print(f"❌ B2 Auth failed: {response.status_code}")
-                self.authorized = False
-        except Exception as e:
-            print(f"❌ B2 Auth error: {e}")
-            self.authorized = False
-    
-    def get_upload_url(self):
-        """Get upload URL and token"""
-        if not self.authorized:
-            return None, None
-        
-        response = requests.post(
-            f"{self.api_url}/b2api/v2/b2_get_upload_url",
-            headers={"Authorization": self.authorization_token},
-            json={"bucketId": self.bucket_id}
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data['uploadUrl'], data['authorizationToken']
-        return None, None
-    
-    def upload_file(self, file_data, file_name, content_type='image/jpeg'):
-        """Upload file directly to B2"""
-        if not self.authorized:
-            return self._get_placeholder_url()
-        
-        try:
-            upload_url, upload_token = self.get_upload_url()
-            if not upload_url:
-                return self._get_placeholder_url()
-            
-            # Generate unique filename
-            ext = file_name.split('.')[-1] if '.' in file_name else 'jpg'
-            unique_name = f"products/{uuid.uuid4().hex}.{ext}"
-            
-            headers = {
-                "Authorization": upload_token,
-                "X-Bz-File-Name": unique_name,
-                "Content-Type": content_type,
-                "X-Bz-Content-Sha1": hashlib.sha1(file_data).hexdigest()
-            }
-            
-            response = requests.post(upload_url, headers=headers, data=file_data)
-            
-            if response.status_code == 200:
-                result = response.json()
-                return f"https://{self.bucket_name}.s3.{self._get_region()}.backblazeb2.com/{unique_name}"
-            
-        except Exception as e:
-            print(f"❌ B2 upload failed: {e}")
-        
-        return self._get_placeholder_url()
-    
-    def _get_region(self):
-        """Extract region from API URL"""
-        if 'eu-central' in str(self.api_url):
-            return 'eu-central-003'
-        return 'us-west-002'
-    
-    def _get_placeholder_url(self):
-        return "https://via.placeholder.com/300x300?text=Shoe+Image"
-
-
-# ==================== CONFIGURATION ====================
+# Load environment variables
 load_dotenv()
 
+# ==================== CONFIGURATION ====================
 class Config:
     # App settings
     SECRET_KEY = os.environ.get('SECRET_KEY', 'karanja-shoe-store-secret-key-2026')
@@ -153,8 +56,111 @@ class Config:
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
     
     # Data directory - FIXED for Render
-    # Use /tmp which is writable on Render, or current directory for local
     DATA_DIR = '/tmp/karanja-data' if not DEBUG else './data'
+
+
+# ==================== B2 DIRECT API ====================
+class B2DirectAPI:
+    """Direct B2 API client - no b2sdk dependency"""
+    
+    def __init__(self, key_id, application_key, bucket_name, bucket_id):
+        self.key_id = key_id
+        self.application_key = application_key
+        self.bucket_name = bucket_name
+        self.bucket_id = bucket_id
+        self.api_url = None
+        self.download_url = None
+        self.authorization_token = None
+        self.authorized = False
+        self._authenticate()
+    
+    def _authenticate(self):
+        """Authenticate with B2 API"""
+        try:
+            auth_string = f"{self.key_id}:{self.application_key}"
+            auth_header = base64.b64encode(auth_string.encode()).decode()
+            
+            response = requests.get(
+                "https://api.backblazeb2.com/b2api/v2/b2_authorize_account",
+                headers={"Authorization": f"Basic {auth_header}"},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.api_url = data['apiUrl']
+                self.download_url = data['downloadUrl']
+                self.authorization_token = data['authorizationToken']
+                self.authorized = True
+                print(f"✅ B2 Authenticated: {self.bucket_name}")
+            else:
+                print(f"❌ B2 Auth failed: {response.status_code}")
+                self.authorized = False
+        except Exception as e:
+            print(f"❌ B2 Auth error: {e}")
+            self.authorized = False
+    
+    def get_upload_url(self):
+        """Get upload URL and token"""
+        if not self.authorized:
+            return None, None
+        
+        try:
+            response = requests.post(
+                f"{self.api_url}/b2api/v2/b2_get_upload_url",
+                headers={"Authorization": self.authorization_token},
+                json={"bucketId": self.bucket_id},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data['uploadUrl'], data['authorizationToken']
+        except Exception as e:
+            print(f"❌ B2 get_upload_url error: {e}")
+        
+        return None, None
+    
+    def upload_file(self, file_data, file_name, content_type='image/jpeg'):
+        """Upload file directly to B2"""
+        if not self.authorized:
+            return self._get_placeholder_url()
+        
+        try:
+            upload_url, upload_token = self.get_upload_url()
+            if not upload_url:
+                return self._get_placeholder_url()
+            
+            # Generate unique filename
+            ext = file_name.split('.')[-1] if '.' in file_name else 'jpg'
+            unique_name = f"products/{uuid.uuid4().hex}.{ext}"
+            
+            headers = {
+                "Authorization": upload_token,
+                "X-Bz-File-Name": unique_name,
+                "Content-Type": content_type,
+                "X-Bz-Content-Sha1": hashlib.sha1(file_data).hexdigest()
+            }
+            
+            response = requests.post(upload_url, headers=headers, data=file_data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return f"https://{self.bucket_name}.s3.{self._get_region()}.backblazeb2.com/{unique_name}"
+            
+        except Exception as e:
+            print(f"❌ B2 upload failed: {e}")
+        
+        return self._get_placeholder_url()
+    
+    def _get_region(self):
+        """Extract region from API URL"""
+        if 'eu-central' in str(self.api_url):
+            return 'eu-central-003'
+        return 'us-west-002'
+    
+    def _get_placeholder_url(self):
+        return "https://via.placeholder.com/300x300?text=Shoe+Image"
 
 
 # ==================== B2 STORAGE MANAGER ====================
@@ -213,7 +219,10 @@ class Product:
         total = 0
         if isinstance(self.sizes, dict):
             for size, stock in self.sizes.items():
-                total += int(stock) if str(stock).isdigit() else 0
+                try:
+                    total += int(stock) if str(stock).isdigit() else 0
+                except:
+                    pass
         return total
     
     def to_dict(self):
@@ -280,7 +289,7 @@ class Sale:
         }
 
 
-# ==================== DATABASE MANAGER - FIXED FOR RENDER ====================
+# ==================== DATABASE MANAGER ====================
 class DatabaseManager:
     """File-based JSON storage - Works on Render with /tmp directory"""
     
@@ -371,7 +380,10 @@ class DatabaseManager:
                 if 'sizes' in updates:
                     total = 0
                     for size, stock in product.get('sizes', {}).items():
-                        total += int(stock) if str(stock).isdigit() else 0
+                        try:
+                            total += int(stock) if str(stock).isdigit() else 0
+                        except:
+                            pass
                     product['total_stock'] = total
                 
                 self.products[i] = product
@@ -413,9 +425,12 @@ class DatabaseManager:
         if product and 'sizes' in product:
             size = str(sale['size'])
             if size in product['sizes']:
-                current_stock = int(product['sizes'][size])
-                product['sizes'][size] = max(0, current_stock - sale['quantity'])
-                self.update_product(product['id'], {'sizes': product['sizes']})
+                try:
+                    current_stock = int(product['sizes'][size])
+                    product['sizes'][size] = max(0, current_stock - sale['quantity'])
+                    self.update_product(product['id'], {'sizes': product['sizes']})
+                except:
+                    pass
         
         self._update_category_sales(sale)
         
@@ -427,24 +442,27 @@ class DatabaseManager:
             return
         
         category = product.get('category', 'Uncategorized')
-        date = datetime.fromisoformat(sale['timestamp'])
-        month_key = f"{date.year}-{date.month:02d}"
-        
-        if month_key not in self.category_sales:
-            self.category_sales[month_key] = {}
-        
-        if category not in self.category_sales[month_key]:
-            self.category_sales[month_key][category] = {
-                'revenue': 0,
-                'quantity': 0,
-                'profit': 0
-            }
-        
-        self.category_sales[month_key][category]['revenue'] += sale['total_amount']
-        self.category_sales[month_key][category]['quantity'] += sale['quantity']
-        self.category_sales[month_key][category]['profit'] += sale['total_profit']
-        
-        self.save_json(self.category_sales_file, self.category_sales)
+        try:
+            date = datetime.fromisoformat(sale['timestamp'])
+            month_key = f"{date.year}-{date.month:02d}"
+            
+            if month_key not in self.category_sales:
+                self.category_sales[month_key] = {}
+            
+            if category not in self.category_sales[month_key]:
+                self.category_sales[month_key][category] = {
+                    'revenue': 0,
+                    'quantity': 0,
+                    'profit': 0
+                }
+            
+            self.category_sales[month_key][category]['revenue'] += sale['total_amount']
+            self.category_sales[month_key][category]['quantity'] += sale['quantity']
+            self.category_sales[month_key][category]['profit'] += sale['total_profit']
+            
+            self.save_json(self.category_sales_file, self.category_sales)
+        except Exception as e:
+            print(f"⚠️ Error updating category sales: {e}")
     
     def get_today_sales(self):
         today = datetime.now().date()
@@ -641,16 +659,19 @@ class DatabaseManager:
         for product in self.products:
             sizes = product.get('sizes', {})
             for size, stock in sizes.items():
-                stock = int(stock) if str(stock).isdigit() else 0
-                if 0 < stock <= Config.LOW_STOCK_THRESHOLD:
-                    alerts.append({
-                        'type': 'low_stock',
-                        'product': product.get('name'),
-                        'product_id': product.get('id'),
-                        'size': size,
-                        'stock': stock,
-                        'message': f"{product.get('name')} (Size {size}) - only {stock} left!"
-                    })
+                try:
+                    stock = int(stock) if str(stock).isdigit() else 0
+                    if 0 < stock <= Config.LOW_STOCK_THRESHOLD:
+                        alerts.append({
+                            'type': 'low_stock',
+                            'product': product.get('name'),
+                            'product_id': product.get('id'),
+                            'size': size,
+                            'stock': stock,
+                            'message': f"{product.get('name')} (Size {size}) - only {stock} left!"
+                        })
+                except:
+                    pass
         
         return alerts
     
@@ -774,8 +795,19 @@ db = DatabaseManager()
 b2 = B2StorageManager()
 
 
-# ==================== AUTHENTICATION DECORATOR ====================
+# ==================== ERROR HANDLER FOR DEBUGGING ====================
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Global exception handler"""
+    print(f"❌ Unhandled exception: {str(e)}")
+    print(traceback.format_exc())
+    return jsonify({
+        'error': 'Internal server error',
+        'message': str(e) if Config.DEBUG else 'An unexpected error occurred'
+    }), 500
 
+
+# ==================== AUTHENTICATION DECORATOR ====================
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -786,45 +818,69 @@ def login_required(f):
 
 
 # ==================== ROUTES: MAIN ====================
-
 @app.route('/')
 def index():
-    return render_template('index.html')
+    """Serve the main application"""
+    try:
+        # Check if template exists
+        template_path = os.path.join(app.root_path, 'templates', 'index.html')
+        if not os.path.exists(template_path):
+            print(f"⚠️ Template not found at: {template_path}")
+            return "Karanja Shoe Store - Template not found. Please check deployment.", 500
+        
+        return render_template('index.html')
+    except Exception as e:
+        print(f"❌ Error rendering template: {e}")
+        print(traceback.format_exc())
+        return f"Error loading application: {str(e)}", 500
 
 @app.route('/api/health')
 def health_check():
+    """Health check endpoint"""
+    template_exists = os.path.exists(os.path.join(app.root_path, 'templates', 'index.html'))
+    
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
         'b2_storage': b2.authorized,
-        'database': os.path.exists(db.data_dir),
-        'database_path': db.data_dir,
+        'database': {
+            'path': db.data_dir,
+            'exists': os.path.exists(db.data_dir),
+            'writable': os.access(db.data_dir, os.W_OK) if os.path.exists(db.data_dir) else False
+        },
+        'template': {
+            'exists': template_exists,
+            'path': os.path.join(app.root_path, 'templates', 'index.html')
+        },
         'products': len(db.products),
         'sales': len(db.sales)
     })
 
 
 # ==================== ROUTES: AUTHENTICATION ====================
-
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.json
-    email = data.get('email', '')
-    password = data.get('password', '')
-    
-    if email == Config.ADMIN_EMAIL and password == Config.ADMIN_PASSWORD:
-        session['logged_in'] = True
-        session['user'] = {'email': email, 'name': 'Admin Karanja'}
-        return jsonify({
-            'success': True,
-            'user': {
-                'email': email,
-                'name': 'Admin Karanja',
-                'role': 'admin'
-            }
-        })
-    
-    return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+    try:
+        data = request.json
+        email = data.get('email', '')
+        password = data.get('password', '')
+        
+        if email == Config.ADMIN_EMAIL and password == Config.ADMIN_PASSWORD:
+            session['logged_in'] = True
+            session['user'] = {'email': email, 'name': 'Admin Karanja'}
+            return jsonify({
+                'success': True,
+                'user': {
+                    'email': email,
+                    'name': 'Admin Karanja',
+                    'role': 'admin'
+                }
+            })
+        
+        return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+    except Exception as e:
+        print(f"❌ Login error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -842,7 +898,6 @@ def get_session():
 
 
 # ==================== ROUTES: PRODUCTS ====================
-
 @app.route('/api/products', methods=['GET'])
 @login_required
 def get_products():
@@ -883,6 +938,8 @@ def create_product():
         return jsonify(product), 201
         
     except Exception as e:
+        print(f"❌ Error creating product: {e}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/products/<product_id>', methods=['PUT'])
@@ -912,6 +969,7 @@ def update_product(product_id):
         return jsonify({'error': 'Product not found'}), 404
         
     except Exception as e:
+        print(f"❌ Error updating product: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/products/<product_id>', methods=['DELETE'])
@@ -927,7 +985,6 @@ def delete_product(product_id):
 
 
 # ==================== ROUTES: SALES ====================
-
 @app.route('/api/sales', methods=['GET'])
 @login_required
 def get_sales():
@@ -958,11 +1015,12 @@ def create_sale():
         return jsonify(sale), 201
         
     except Exception as e:
+        print(f"❌ Error creating sale: {e}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
 # ==================== ROUTES: STATS ====================
-
 @app.route('/api/stats', methods=['GET'])
 @login_required
 def get_stats():
@@ -987,7 +1045,6 @@ def get_stats():
 
 
 # ==================== ROUTES: NOTIFICATIONS ====================
-
 @app.route('/api/notifications', methods=['GET'])
 @login_required
 def get_notifications():
@@ -1006,7 +1063,6 @@ def mark_notifications_read():
 
 
 # ==================== ROUTES: ALERTS ====================
-
 @app.route('/api/alerts/stock', methods=['GET'])
 @login_required
 def get_stock_alerts():
@@ -1015,7 +1071,6 @@ def get_stock_alerts():
 
 
 # ==================== ROUTES: CATEGORIES ====================
-
 @app.route('/api/categories/rankings', methods=['GET'])
 @login_required
 def get_category_rankings():
@@ -1025,7 +1080,6 @@ def get_category_rankings():
 
 
 # ==================== ROUTES: BUSINESS ====================
-
 @app.route('/api/business/plan', methods=['GET'])
 @login_required
 def get_business_plan():
@@ -1046,7 +1100,6 @@ def get_bi_weekly_budget():
 
 
 # ==================== ROUTES: STATEMENTS ====================
-
 @app.route('/api/statements/daily', methods=['GET'])
 @login_required
 def get_daily_statement():
@@ -1055,7 +1108,6 @@ def get_daily_statement():
 
 
 # ==================== ROUTES: CHARTS ====================
-
 @app.route('/api/charts/sales', methods=['GET'])
 @login_required
 def get_sales_chart():
@@ -1158,7 +1210,6 @@ def get_business_plan_chart():
 
 
 # ==================== ROUTES: EXPORT ====================
-
 @app.route('/api/export/sales', methods=['GET'])
 @login_required
 def export_sales():
@@ -1208,7 +1259,6 @@ def export_sales():
 
 
 # ==================== ROUTES: INIT SAMPLE DATA ====================
-
 @app.route('/api/init/sample-data', methods=['POST'])
 @login_required
 def create_sample_data():
@@ -1284,19 +1334,18 @@ def create_sample_data():
     })
 
 
-# ==================== ERROR HANDLERS ====================
-
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({'error': 'Resource not found'}), 404
-
-@app.errorhandler(500)
-def server_error(e):
-    return jsonify({'error': 'Internal server error'}), 500
-
-
 # ==================== APPLICATION ENTRY POINT ====================
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    
+    # Print startup information
+    print("=" * 50)
+    print("🚀 KARANJA SHOE STORE STARTING...")
+    print(f"📁 Data directory: {Config.DATA_DIR}")
+    print(f"📁 Template path: {os.path.join(app.root_path, 'templates', 'index.html')}")
+    print(f"🔑 B2 Storage: {'✅ Connected' if b2.authorized else '❌ Not connected'}")
+    print(f"🌐 Port: {port}")
+    print(f"🐍 Debug mode: {Config.DEBUG}")
+    print("=" * 50)
+    
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
