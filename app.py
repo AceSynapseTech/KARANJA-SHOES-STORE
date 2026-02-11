@@ -1,6 +1,6 @@
 """
 KARANJA SHOE STORE - COMPLETE FLASK APPLICATION
-Fixed for Python 3.13 - No pkg_resources dependency
+Fixed for Render deployment - No permission issues
 """
 
 import os
@@ -24,9 +24,6 @@ import pytz
 from dotenv import load_dotenv
 
 # ==================== B2 SDK FIX - NO PKG_RESOURCES ====================
-# Instead of importing b2sdk, we'll use direct B2 API calls
-# This avoids the pkg_resources dependency issue in Python 3.13
-
 class B2DirectAPI:
     """Direct B2 API client - no b2sdk dependency"""
     
@@ -154,11 +151,15 @@ class Config:
     # Admin credentials
     ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@karanjashoes.com')
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
+    
+    # Data directory - FIXED for Render
+    # Use /tmp which is writable on Render, or current directory for local
+    DATA_DIR = '/tmp/karanja-data' if not DEBUG else './data'
 
 
-# ==================== B2 STORAGE MANAGER (FIXED) ====================
+# ==================== B2 STORAGE MANAGER ====================
 class B2StorageManager:
-    """Handles B2 cloud storage operations - No b2sdk dependency"""
+    """Handles B2 cloud storage operations"""
     
     def __init__(self):
         self.key_id = Config.B2_KEY_ID
@@ -182,11 +183,7 @@ class B2StorageManager:
     
     def delete_image(self, image_url):
         """Delete image from B2 storage"""
-        # Simplified delete - not implementing full delete for brevity
         return True
-    
-    def _get_placeholder_url(self):
-        return "https://via.placeholder.com/300x300?text=Shoe+Image"
 
 
 # ==================== DATA MODELS ====================
@@ -283,12 +280,13 @@ class Sale:
         }
 
 
-# ==================== DATABASE MANAGER ====================
+# ==================== DATABASE MANAGER - FIXED FOR RENDER ====================
 class DatabaseManager:
-    """File-based JSON storage for Render deployment"""
+    """File-based JSON storage - Works on Render with /tmp directory"""
     
     def __init__(self):
-        self.data_dir = '/var/data' if not Config.DEBUG else './data'
+        # Use Config.DATA_DIR which is set to /tmp/karanja-data on Render
+        self.data_dir = Config.DATA_DIR
         self.ensure_data_directory()
         
         self.products_file = os.path.join(self.data_dir, 'products.json')
@@ -298,6 +296,7 @@ class DatabaseManager:
         self.category_sales_file = os.path.join(self.data_dir, 'category_sales.json')
         self.settings_file = os.path.join(self.data_dir, 'settings.json')
         
+        # Initialize data with empty defaults
         self.products = self.load_json(self.products_file, [])
         self.sales = self.load_json(self.sales_file, [])
         self.notifications = self.load_json(self.notifications_file, [])
@@ -314,19 +313,30 @@ class DatabaseManager:
         print(f"📊 Products: {len(self.products)} | Sales: {len(self.sales)}")
     
     def ensure_data_directory(self):
-        if not os.path.exists(self.data_dir):
+        """Create data directory if it doesn't exist"""
+        try:
+            os.makedirs(self.data_dir, exist_ok=True)
+            print(f"✅ Data directory ready: {self.data_dir}")
+        except Exception as e:
+            print(f"⚠️ Could not create {self.data_dir}, using current directory")
+            # Fallback to current directory
+            self.data_dir = './data'
             os.makedirs(self.data_dir, exist_ok=True)
     
     def load_json(self, filepath, default):
+        """Load JSON data from file"""
         try:
             if os.path.exists(filepath):
                 with open(filepath, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    print(f"✅ Loaded {os.path.basename(filepath)}")
+                    return data
         except Exception as e:
             print(f"⚠️ Error loading {filepath}: {e}")
         return default
     
     def save_json(self, filepath, data):
+        """Save JSON data to file"""
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -392,11 +402,13 @@ class DatabaseManager:
         sale = Sale(sale_data).to_dict()
         self.sales.insert(0, sale)
         
+        # Keep only last 1000 sales
         if len(self.sales) > 1000:
             self.sales = self.sales[:1000]
         
         self.save_json(self.sales_file, self.sales)
         
+        # Update product stock
         product = self.get_product(sale['product_id'])
         if product and 'sizes' in product:
             size = str(sale['size'])
@@ -648,6 +660,7 @@ class DatabaseManager:
         today_sales = self.get_today_sales()
         today_str = datetime.now().strftime('%Y-%m-%d')
         
+        # Check if already generated
         for statement in self.statements:
             try:
                 if statement.get('date', '')[:10] == today_str:
@@ -785,6 +798,7 @@ def health_check():
         'timestamp': datetime.now().isoformat(),
         'b2_storage': b2.authorized,
         'database': os.path.exists(db.data_dir),
+        'database_path': db.data_dir,
         'products': len(db.products),
         'sales': len(db.sales)
     })
