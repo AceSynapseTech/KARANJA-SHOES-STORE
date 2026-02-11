@@ -1,0 +1,34 @@
+# render.yaml - Deploy configuration for Render
+
+services:
+  - type: web
+    name: karanja-shoe-store
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: false
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APPLICATION_KEY
+        sync: false
+      - key: B2_BUCKET_NAME
+        value: karanjashoesstore
+      - key: B2_BUCKET_ID
+        value: 9240b308551f401795cd0d15
+      - key: B2_ENDPOINT
+        value: https://s3.eu-central-003.backblazeb2.com
+      - key: ADMIN_EMAIL
+        value: admin@karanjashoes.com
+      - key: ADMIN_PASSWORD
+        sync: false
+    
+  - type: cron
+    name: daily-statement-generator
+    env: python
+    schedule: "0 21 * * *"  # 9:00 PM daily
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "from app import app, db; app.app_context().push(); db.generate_daily_statement(); print('Daily statement generated')"
