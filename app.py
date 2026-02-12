@@ -37,6 +37,8 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('static', exist_ok=True)
 
 # ==================== BACKBLAZE B2 CONFIGURATION ====================
+# IMPORTANT: You need to get your correct Application Key from Backblaze B2
+# Go to Backblaze B2 Console -> App Keys -> Create a new application key with write access
 B2_CONFIG = {
     # BUCKET INFORMATION
     'BUCKET_NAME': 'karanja-shoe-store',
@@ -46,9 +48,9 @@ B2_CONFIG = {
     'CDN_URL': 'https://f005.backblazeb2.com/file/karanja-shoe-store',
     'CREATED_DATE': 'January 22, 2026',
     
-    # MASTER APPLICATION KEY
-    'ACCESS_KEY_ID': '3811f85f980c',
-    'SECRET_ACCESS_KEY': 'K003RvlqkCMQKDtV5Dzgk9qDcDj6fN8',
+    # MASTER APPLICATION KEY - UPDATE THESE WITH CORRECT VALUES FROM B2 CONSOLE
+    'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', ''),  # Get from environment variable
+    'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', ''),  # Get from environment variable
     
     # BUCKET STATUS
     'TYPE': 'Private',
@@ -70,18 +72,27 @@ B2_CONFIG = {
     }
 }
 
-# Initialize Backblaze B2 client
-b2_client = boto3.client(
-    's3',
-    endpoint_url=f'https://{B2_CONFIG["ENDPOINT"]}',
-    aws_access_key_id=B2_CONFIG['ACCESS_KEY_ID'],
-    aws_secret_access_key=B2_CONFIG['SECRET_ACCESS_KEY'],
-    config=Config(
-        signature_version='s3v4',
-        region_name=B2_CONFIG['REGION'],
-        retries={'max_attempts': 3}
-    )
-)
+# Initialize B2 client only if credentials are provided
+b2_client = None
+if B2_CONFIG['ACCESS_KEY_ID'] and B2_CONFIG['SECRET_ACCESS_KEY']:
+    try:
+        b2_client = boto3.client(
+            's3',
+            endpoint_url=f'https://{B2_CONFIG["ENDPOINT"]}',
+            aws_access_key_id=B2_CONFIG['ACCESS_KEY_ID'],
+            aws_secret_access_key=B2_CONFIG['SECRET_ACCESS_KEY'],
+            config=Config(
+                signature_version='s3v4',
+                region_name=B2_CONFIG['REGION'],
+                retries={'max_attempts': 3}
+            )
+        )
+        logger.info("B2 client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize B2 client: {e}")
+        b2_client = None
+else:
+    logger.warning("B2 credentials not provided. Running in local storage mode.")
 
 # ==================== EXTENSIONS ====================
 CORS(app, resources={
@@ -128,6 +139,147 @@ class CustomJSONEncoder(json.JSONEncoder):
 
 app.json_encoder = CustomJSONEncoder
 
+# ==================== LOCAL STORAGE FALLBACK ====================
+class LocalDataStore:
+    """Fallback data store using local JSON files when B2 is unavailable"""
+    
+    def __init__(self):
+        self.data_dir = 'local_data'
+        os.makedirs(self.data_dir, exist_ok=True)
+        self.cache = {}
+        self.load_all_data()
+    
+    def _read_json(self, filename):
+        filepath = os.path.join(self.data_dir, filename)
+        try:
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            return {}
+        except Exception as e:
+            logger.error(f"Error reading {filename}: {e}")
+            return {}
+    
+    def _write_json(self, filename, data):
+        filepath = os.path.join(self.data_dir, filename)
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, cls=CustomJSONEncoder, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Error writing {filename}: {e}")
+            return False
+    
+    def load_all_data(self):
+        self.cache['products'] = self._read_json('products.json')
+        self.cache['sales'] = self._read_json('sales.json')
+        self.cache['notifications'] = self._read_json('notifications.json')
+        self.cache['settings'] = self._read_json('settings.json')
+        self.cache['monthly_category_sales'] = self._read_json('monthly_category_sales.json')
+        self.cache['daily_statements'] = self._read_json('daily_statements.json')
+        self.cache['budget_plans'] = self._read_json('budget_plans.json')
+        self.cache['sale_statements'] = self._read_json('sale_statements.json')
+        self.cache['b2_images'] = self._read_json('b2_images.json')
+        self.cache['users'] = self._read_json('users.json')
+        
+        # Initialize default values if empty
+        if not self.cache['products']:
+            self.cache['products'] = []
+        if not self.cache['sales']:
+            self.cache['sales'] = []
+        if not self.cache['notifications']:
+            self.cache['notifications'] = []
+        if not self.cache['settings']:
+            self.cache['settings'] = {
+                'currency': 'KES',
+                'low_stock_threshold': 3,
+                'old_stock_days': 30,
+                'theme': 'light',
+                'storage': 'local'
+            }
+        if not self.cache['monthly_category_sales']:
+            self.cache['monthly_category_sales'] = {}
+        if not self.cache['daily_statements']:
+            self.cache['daily_statements'] = []
+        if not self.cache['budget_plans']:
+            self.cache['budget_plans'] = []
+        if not self.cache['sale_statements']:
+            self.cache['sale_statements'] = []
+        if not self.cache['b2_images']:
+            self.cache['b2_images'] = []
+        if not self.cache['users']:
+            self.cache['users'] = []
+    
+    @property
+    def products(self):
+        return self.cache.get('products', [])
+    
+    def save_products(self):
+        return self._write_json('products.json', self.products)
+    
+    @property
+    def sales(self):
+        return self.cache.get('sales', [])
+    
+    def save_sales(self):
+        return self._write_json('sales.json', self.sales)
+    
+    @property
+    def notifications(self):
+        return self.cache.get('notifications', [])
+    
+    def save_notifications(self):
+        return self._write_json('notifications.json', self.notifications)
+    
+    @property
+    def settings(self):
+        return self.cache.get('settings', {})
+    
+    def save_settings(self):
+        return self._write_json('settings.json', self.settings)
+    
+    @property
+    def monthly_category_sales(self):
+        return self.cache.get('monthly_category_sales', {})
+    
+    def save_monthly_category_sales(self):
+        return self._write_json('monthly_category_sales.json', self.monthly_category_sales)
+    
+    @property
+    def daily_statements(self):
+        return self.cache.get('daily_statements', [])
+    
+    def save_daily_statements(self):
+        return self._write_json('daily_statements.json', self.daily_statements)
+    
+    @property
+    def budget_plans(self):
+        return self.cache.get('budget_plans', [])
+    
+    def save_budget_plans(self):
+        return self._write_json('budget_plans.json', self.budget_plans)
+    
+    @property
+    def sale_statements(self):
+        return self.cache.get('sale_statements', [])
+    
+    def save_sale_statements(self):
+        return self._write_json('sale_statements.json', self.sale_statements)
+    
+    @property
+    def b2_images(self):
+        return self.cache.get('b2_images', [])
+    
+    def save_b2_images(self):
+        return self._write_json('b2_images.json', self.b2_images)
+    
+    @property
+    def users(self):
+        return self.cache.get('users', [])
+    
+    def save_users(self):
+        return self._write_json('users.json', self.users)
+
 # ==================== B2 DATA STORAGE MANAGER ====================
 class B2DataStore:
     """All data stored in Backblaze B2 - Complete cloud storage"""
@@ -136,10 +288,14 @@ class B2DataStore:
         self.b2_client = b2_client
         self.bucket_name = bucket_name
         self.cache = {}  # In-memory cache for performance
+        self.b2_available = b2_client is not None
         self.load_all_data()
     
     def _read_json_from_b2(self, b2_key):
         """Read JSON data from B2 bucket"""
+        if not self.b2_available:
+            return {}
+        
         try:
             response = self.b2_client.get_object(
                 Bucket=self.bucket_name,
@@ -158,6 +314,9 @@ class B2DataStore:
     
     def _write_json_to_b2(self, b2_key, data):
         """Write JSON data to B2 bucket"""
+        if not self.b2_available:
+            return False
+        
         try:
             json_str = json.dumps(data, cls=CustomJSONEncoder, indent=2)
             self.b2_client.put_object(
@@ -175,148 +334,166 @@ class B2DataStore:
     
     def load_all_data(self):
         """Load all data from B2 into cache"""
-        self.cache['products'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['PRODUCTS'])
-        self.cache['sales'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['SALES'])
-        self.cache['notifications'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['NOTIFICATIONS'])
-        self.cache['settings'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['SETTINGS'])
-        self.cache['monthly_category_sales'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['MONTHLY_CATEGORY_SALES'])
-        self.cache['daily_statements'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['DAILY_STATEMENTS'])
-        self.cache['budget_plans'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['BUDGET_PLANS'])
-        self.cache['sale_statements'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['SALE_STATEMENTS'])
-        self.cache['b2_images'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['B2_IMAGES'])
-        self.cache['users'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['USERS'])
+        if self.b2_available:
+            self.cache['products'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['PRODUCTS'])
+            self.cache['sales'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['SALES'])
+            self.cache['notifications'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['NOTIFICATIONS'])
+            self.cache['settings'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['SETTINGS'])
+            self.cache['monthly_category_sales'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['MONTHLY_CATEGORY_SALES'])
+            self.cache['daily_statements'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['DAILY_STATEMENTS'])
+            self.cache['budget_plans'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['BUDGET_PLANS'])
+            self.cache['sale_statements'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['SALE_STATEMENTS'])
+            self.cache['b2_images'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['B2_IMAGES'])
+            self.cache['users'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['USERS'])
+        else:
+            self.cache = {}
         
         # Initialize default values if empty
-        if not self.cache['products']:
+        if not self.cache.get('products'):
             self.cache['products'] = []
-        if not self.cache['sales']:
+        if not self.cache.get('sales'):
             self.cache['sales'] = []
-        if not self.cache['notifications']:
+        if not self.cache.get('notifications'):
             self.cache['notifications'] = []
-        if not self.cache['settings']:
+        if not self.cache.get('settings'):
             self.cache['settings'] = {
                 'currency': 'KES',
                 'low_stock_threshold': 3,
                 'old_stock_days': 30,
                 'theme': 'light',
-                'b2_bucket': B2_CONFIG['BUCKET_ID'],
-                'b2_endpoint': B2_CONFIG['ENDPOINT'],
-                'b2_created': B2_CONFIG['CREATED_DATE']
+                'b2_bucket': B2_CONFIG['BUCKET_ID'] if self.b2_available else 'local',
+                'b2_endpoint': B2_CONFIG['ENDPOINT'] if self.b2_available else 'local',
+                'b2_created': B2_CONFIG['CREATED_DATE'] if self.b2_available else 'local'
             }
-        if not self.cache['monthly_category_sales']:
+        if not self.cache.get('monthly_category_sales'):
             self.cache['monthly_category_sales'] = {}
-        if not self.cache['daily_statements']:
+        if not self.cache.get('daily_statements'):
             self.cache['daily_statements'] = []
-        if not self.cache['budget_plans']:
+        if not self.cache.get('budget_plans'):
             self.cache['budget_plans'] = []
-        if not self.cache['sale_statements']:
+        if not self.cache.get('sale_statements'):
             self.cache['sale_statements'] = []
-        if not self.cache['b2_images']:
+        if not self.cache.get('b2_images'):
             self.cache['b2_images'] = []
-        if not self.cache['users']:
+        if not self.cache.get('users'):
             self.cache['users'] = []
     
-    # ========== Products ==========
     @property
     def products(self):
         return self.cache.get('products', [])
     
     def save_products(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['PRODUCTS'], self.products)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['PRODUCTS'], self.products)
+        return False
     
-    # ========== Sales ==========
     @property
     def sales(self):
         return self.cache.get('sales', [])
     
     def save_sales(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['SALES'], self.sales)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['SALES'], self.sales)
+        return False
     
-    # ========== Notifications ==========
     @property
     def notifications(self):
         return self.cache.get('notifications', [])
     
     def save_notifications(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['NOTIFICATIONS'], self.notifications)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['NOTIFICATIONS'], self.notifications)
+        return False
     
-    # ========== Settings ==========
     @property
     def settings(self):
         return self.cache.get('settings', {})
     
     def save_settings(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['SETTINGS'], self.settings)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['SETTINGS'], self.settings)
+        return False
     
-    # ========== Monthly Category Sales ==========
     @property
     def monthly_category_sales(self):
         return self.cache.get('monthly_category_sales', {})
     
     def save_monthly_category_sales(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['MONTHLY_CATEGORY_SALES'], self.monthly_category_sales)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['MONTHLY_CATEGORY_SALES'], self.monthly_category_sales)
+        return False
     
-    # ========== Daily Statements ==========
     @property
     def daily_statements(self):
         return self.cache.get('daily_statements', [])
     
     def save_daily_statements(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['DAILY_STATEMENTS'], self.daily_statements)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['DAILY_STATEMENTS'], self.daily_statements)
+        return False
     
-    # ========== Budget Plans ==========
     @property
     def budget_plans(self):
         return self.cache.get('budget_plans', [])
     
     def save_budget_plans(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['BUDGET_PLANS'], self.budget_plans)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['BUDGET_PLANS'], self.budget_plans)
+        return False
     
-    # ========== Sale Statements ==========
     @property
     def sale_statements(self):
         return self.cache.get('sale_statements', [])
     
     def save_sale_statements(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['SALE_STATEMENTS'], self.sale_statements)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['SALE_STATEMENTS'], self.sale_statements)
+        return False
     
-    # ========== B2 Images ==========
     @property
     def b2_images(self):
         return self.cache.get('b2_images', [])
     
     def save_b2_images(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['B2_IMAGES'], self.b2_images)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['B2_IMAGES'], self.b2_images)
+        return False
     
-    # ========== Users ==========
     @property
     def users(self):
         return self.cache.get('users', [])
     
     def save_users(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['USERS'], self.users)
+        if self.b2_available:
+            return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['USERS'], self.users)
+        return False
     
-    # ========== Save All ==========
     def save_all(self):
         """Save all data to B2"""
-        self.save_products()
-        self.save_sales()
-        self.save_notifications()
-        self.save_settings()
-        self.save_monthly_category_sales()
-        self.save_daily_statements()
-        self.save_budget_plans()
-        self.save_sale_statements()
-        self.save_b2_images()
-        self.save_users()
+        if self.b2_available:
+            self.save_products()
+            self.save_sales()
+            self.save_notifications()
+            self.save_settings()
+            self.save_monthly_category_sales()
+            self.save_daily_statements()
+            self.save_budget_plans()
+            self.save_sale_statements()
+            self.save_b2_images()
+            self.save_users()
 
-# Initialize B2 Data Store
-b2_store = B2DataStore(b2_client, B2_CONFIG['BUCKET_NAME'])
+# Initialize Data Store (use B2 if available, otherwise use local)
+if b2_client:
+    data_store = B2DataStore(b2_client, B2_CONFIG['BUCKET_NAME'])
+    logger.info("Using Backblaze B2 for data storage")
+else:
+    data_store = LocalDataStore()
+    logger.info("Using local storage for data (B2 not configured)")
 
 # Initialize default admin if no users exist
-if not b2_store.users:
+if not data_store.users:
     admin_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
-    b2_store.cache['users'] = [{
+    data_store.cache['users'] = [{
         'id': 1,
         'email': 'admin@karanjashoes.com',
         'password': admin_password,
@@ -324,12 +501,15 @@ if not b2_store.users:
         'role': 'admin',
         'created_at': datetime.now().isoformat()
     }]
-    b2_store.save_users()
-    logger.info("Created default admin user in B2")
+    data_store.save_users()
+    logger.info("Created default admin user")
 
 # ==================== BACKBLAZE B2 HELPER FUNCTIONS ====================
 def generate_signed_url(s3_key, expiration=604800):
     """Generate a pre-signed URL for private B2 bucket access"""
+    if not b2_client:
+        return None
+    
     try:
         if not s3_key:
             return None
@@ -370,6 +550,9 @@ def extract_s3_key_from_url(url):
 @jwt_required()
 def upload_to_b2():
     """Upload image to Backblaze B2 Private Bucket"""
+    if not b2_client:
+        return jsonify({'error': 'Backblaze B2 is not configured. Please set B2 credentials.'}), 503
+    
     try:
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
@@ -421,8 +604,8 @@ def upload_to_b2():
             'uploadedAt': datetime.now().isoformat()
         }
         
-        b2_store.b2_images.append(image_record)
-        b2_store.save_b2_images()
+        data_store.b2_images.append(image_record)
+        data_store.save_b2_images()
         
         return jsonify({
             'success': True,
@@ -436,7 +619,7 @@ def upload_to_b2():
         logger.error(f"Error uploading to B2: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== LOCAL FILE UPLOAD ROUTE (FALLBACK) ====================
+# ==================== LOCAL FILE UPLOAD ROUTE ====================
 @app.route('/api/upload/local', methods=['POST'])
 @jwt_required()
 def upload_local():
@@ -479,7 +662,7 @@ def upload_local():
 def get_products():
     """Get all products with fresh signed URLs"""
     try:
-        products = b2_store.products
+        products = data_store.products
         
         # Sort by date added (newest first)
         products.sort(key=lambda x: x.get('dateAdded', ''), reverse=True)
@@ -490,7 +673,7 @@ def get_products():
             product_copy = product.copy()
             
             # Handle B2 images
-            if product.get('s3_key'):
+            if product.get('s3_key') and b2_client:
                 fresh_url = generate_signed_url(product['s3_key'], expiration=86400)
                 if fresh_url:
                     product_copy['image'] = fresh_url
@@ -511,7 +694,7 @@ def get_products():
 def get_public_products():
     """Public endpoint to get products - NO LOGIN REQUIRED"""
     try:
-        products = b2_store.products
+        products = data_store.products
         
         # Sort by date added (newest first)
         products.sort(key=lambda x: x.get('dateAdded', ''), reverse=True)
@@ -528,7 +711,7 @@ def get_public_products():
                 del product_copy['createdBy']
             
             # Handle B2 images
-            if product.get('s3_key'):
+            if product.get('s3_key') and b2_client:
                 fresh_url = generate_signed_url(product['s3_key'], expiration=86400)
                 if fresh_url:
                     product_copy['image'] = fresh_url
@@ -601,7 +784,7 @@ def create_product():
         
         # Generate signed URL if we have s3_key
         signed_url = None
-        if s3_key:
+        if s3_key and b2_client:
             signed_url = generate_signed_url(s3_key, expiration=604800)
         
         # Create product object
@@ -641,8 +824,8 @@ def create_product():
             product['image_source'] = 'placeholder'
         
         # Add to store
-        b2_store.products.append(product)
-        b2_store.save_products()
+        data_store.products.append(product)
+        data_store.save_products()
         
         # Add notification
         notification = {
@@ -652,8 +835,8 @@ def create_product():
             'timestamp': datetime.now().isoformat(),
             'read': False
         }
-        b2_store.notifications.insert(0, notification)
-        b2_store.save_notifications()
+        data_store.notifications.insert(0, notification)
+        data_store.save_notifications()
         
         return jsonify({
             'success': True,
@@ -671,7 +854,7 @@ def create_product():
 def update_product(product_id):
     """Update existing product"""
     try:
-        product = next((p for p in b2_store.products if p['id'] == product_id), None)
+        product = next((p for p in data_store.products if p['id'] == product_id), None)
         
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -727,7 +910,7 @@ def update_product(product_id):
         # Update image
         if image_url:
             s3_key = extract_s3_key_from_url(image_url)
-            if s3_key:
+            if s3_key and b2_client:
                 product['s3_key'] = s3_key
                 product['image'] = generate_signed_url(s3_key, expiration=604800)
                 product['image_source'] = 'b2'
@@ -741,7 +924,7 @@ def update_product(product_id):
         
         product['lastUpdated'] = datetime.now().isoformat()
         
-        b2_store.save_products()
+        data_store.save_products()
         
         return jsonify({
             'success': True,
@@ -758,13 +941,13 @@ def update_product(product_id):
 def delete_product(product_id):
     """Delete product"""
     try:
-        product = next((p for p in b2_store.products if p['id'] == product_id), None)
+        product = next((p for p in data_store.products if p['id'] == product_id), None)
         
         if not product:
             return jsonify({'error': 'Product not found'}), 404
         
-        b2_store.products = [p for p in b2_store.products if p['id'] != product_id]
-        b2_store.save_products()
+        data_store.products = [p for p in data_store.products if p['id'] != product_id]
+        data_store.save_products()
         
         # Add notification
         notification = {
@@ -774,8 +957,8 @@ def delete_product(product_id):
             'timestamp': datetime.now().isoformat(),
             'read': False
         }
-        b2_store.notifications.insert(0, notification)
-        b2_store.save_notifications()
+        data_store.notifications.insert(0, notification)
+        data_store.save_notifications()
         
         return jsonify({'success': True, 'message': 'Product deleted successfully'}), 200
         
@@ -784,15 +967,32 @@ def delete_product(product_id):
         return jsonify({'error': str(e)}), 500
 
 # ==================== STATIC FILE SERVING ====================
+# IMPORTANT: Static routes must come BEFORE the catch-all route
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     """Serve static files"""
-    return send_from_directory('static', filename)
+    try:
+        return send_from_directory('static', filename)
+    except Exception as e:
+        logger.error(f"Error serving static file {filename}: {e}")
+        return jsonify({'error': 'Static file not found'}), 404
 
 @app.route('/static/uploads/<path:filename>')
 def serve_upload(filename):
     """Serve uploaded files"""
-    return send_from_directory('static/uploads', filename)
+    try:
+        return send_from_directory('static/uploads', filename)
+    except Exception as e:
+        logger.error(f"Error serving upload {filename}: {e}")
+        return jsonify({'error': 'Uploaded file not found'}), 404
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon"""
+    try:
+        return send_from_directory('static', 'favicon.ico')
+    except:
+        return '', 204
 
 # ==================== AUTHENTICATION ROUTES ====================
 @app.route('/api/auth/login', methods=['POST'])
@@ -806,7 +1006,7 @@ def login():
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
         
-        user = next((u for u in b2_store.users if u['email'] == email), None)
+        user = next((u for u in data_store.users if u['email'] == email), None)
         
         if user and bcrypt.check_password_hash(user['password'], password):
             access_token = create_access_token(
@@ -841,7 +1041,7 @@ def get_current_user():
     """Get current authenticated user"""
     try:
         current_user_id = get_jwt_identity()
-        user = next((u for u in b2_store.users if str(u['id']) == current_user_id), None)
+        user = next((u for u in data_store.users if str(u['id']) == current_user_id), None)
         
         if user:
             return jsonify({
@@ -863,8 +1063,8 @@ def get_current_user():
 def get_dashboard_stats():
     """Get dashboard statistics"""
     try:
-        products = b2_store.products
-        sales = b2_store.sales
+        products = data_store.products
+        sales = data_store.sales
         
         total_products = len(products)
         total_stock = sum([p.get('totalStock', 0) for p in products])
@@ -886,7 +1086,8 @@ def get_dashboard_stats():
             'todayRevenue': today_revenue,
             'todayProfit': today_profit,
             'todayItems': today_items,
-            'salesCount': len(sales)
+            'salesCount': len(sales),
+            'storage_type': 'b2' if b2_client else 'local'
         }), 200
         
     except Exception as e:
@@ -899,7 +1100,8 @@ def get_dashboard_stats():
             'todayRevenue': 0,
             'todayProfit': 0,
             'todayItems': 0,
-            'salesCount': 0
+            'salesCount': 0,
+            'storage_type': 'local'
         }), 200
 
 # ==================== SALES ROUTES ====================
@@ -921,7 +1123,7 @@ def create_sale():
         if not all([product_id, size, quantity, unit_price]):
             return jsonify({'error': 'Missing required fields'}), 400
         
-        product = next((p for p in b2_store.products if p['id'] == product_id), None)
+        product = next((p for p in data_store.products if p['id'] == product_id), None)
         
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -943,7 +1145,7 @@ def create_sale():
         product['totalStock'] = total_stock
         product['lastUpdated'] = datetime.now().isoformat()
         
-        b2_store.save_products()
+        data_store.save_products()
         
         # Calculate amounts
         total_amount = unit_price * quantity
@@ -967,8 +1169,8 @@ def create_sale():
             'timestamp': datetime.now().isoformat()
         }
         
-        b2_store.sales.append(sale)
-        b2_store.save_sales()
+        data_store.sales.append(sale)
+        data_store.save_sales()
         
         # Add notification
         notification = {
@@ -978,8 +1180,8 @@ def create_sale():
             'timestamp': datetime.now().isoformat(),
             'read': False
         }
-        b2_store.notifications.insert(0, notification)
-        b2_store.save_notifications()
+        data_store.notifications.insert(0, notification)
+        data_store.save_notifications()
         
         return jsonify({
             'success': True,
@@ -995,7 +1197,7 @@ def create_sale():
 def get_sales():
     """Get all sales"""
     try:
-        sales = b2_store.sales
+        sales = data_store.sales
         sales.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
         return jsonify(sales), 200
     except Exception as e:
@@ -1008,7 +1210,7 @@ def get_sales():
 def get_notifications():
     """Get all notifications"""
     try:
-        notifications = b2_store.notifications[:50]
+        notifications = data_store.notifications[:50]
         return jsonify(notifications), 200
     except Exception as e:
         logger.error(f"Error getting notifications: {e}")
@@ -1019,7 +1221,7 @@ def get_notifications():
 def get_unread_notification_count():
     """Get unread notification count"""
     try:
-        unread_count = len([n for n in b2_store.notifications if not n.get('read', False)])
+        unread_count = len([n for n in data_store.notifications if not n.get('read', False)])
         return jsonify({'count': unread_count}), 200
     except Exception as e:
         logger.error(f"Error getting unread count: {e}")
@@ -1030,11 +1232,11 @@ def get_unread_notification_count():
 def mark_notification_read(notification_id):
     """Mark notification as read"""
     try:
-        notification = next((n for n in b2_store.notifications if n['id'] == notification_id), None)
+        notification = next((n for n in data_store.notifications if n['id'] == notification_id), None)
         
         if notification:
             notification['read'] = True
-            b2_store.save_notifications()
+            data_store.save_notifications()
             return jsonify({'success': True}), 200
         
         return jsonify({'error': 'Notification not found'}), 404
@@ -1047,6 +1249,13 @@ def mark_notification_read(notification_id):
 @jwt_required()
 def get_b2_info():
     """Get Backblaze B2 bucket information"""
+    if not b2_client:
+        return jsonify({
+            'connected': False,
+            'storage_type': 'local',
+            'message': 'Backblaze B2 not configured. Using local storage.'
+        }), 200
+    
     try:
         return jsonify({
             'bucketId': B2_CONFIG['BUCKET_ID'],
@@ -1058,7 +1267,7 @@ def get_b2_info():
             'type': B2_CONFIG['TYPE'],
             'current_files': B2_CONFIG['CURRENT_FILES'],
             'current_size': B2_CONFIG['CURRENT_SIZE'],
-            'stored_images': len(b2_store.b2_images),
+            'stored_images': len(data_store.b2_images),
             'connected': True
         }), 200
     except Exception as e:
@@ -1074,11 +1283,12 @@ def health_check():
             'status': 'healthy',
             'timestamp': datetime.now().isoformat(),
             'app': 'Karanja Shoe Store',
-            'b2_bucket': B2_CONFIG['BUCKET_NAME'],
-            'b2_created': B2_CONFIG['CREATED_DATE'],
-            'products': len(b2_store.products),
-            'sales': len(b2_store.sales),
-            'images': len(b2_store.b2_images)
+            'b2_bucket': B2_CONFIG['BUCKET_NAME'] if b2_client else 'local',
+            'b2_created': B2_CONFIG['CREATED_DATE'] if b2_client else 'local',
+            'products': len(data_store.products),
+            'sales': len(data_store.sales),
+            'images': len(data_store.b2_images),
+            'storage_type': 'b2' if b2_client else 'local'
         }), 200
     except Exception as e:
         return jsonify({'status': 'degraded', 'error': str(e)}), 200
@@ -1089,33 +1299,72 @@ def index():
     """Serve index.html"""
     try:
         if os.path.exists('index.html'):
-            with open('index.html', 'r', encoding='utf-8') as f:
-                return render_template_string(f.read())
+            return send_file('index.html')
         else:
-            return jsonify({
-                'message': 'Karanja Shoe Store API is running',
-                'b2_bucket': B2_CONFIG['BUCKET_NAME'],
-                'products': len(b2_store.products),
-                'status': 'online'
-            }), 200
+            static_index = os.path.join('static', 'index.html')
+            if os.path.exists(static_index):
+                return send_file(static_index)
+            else:
+                return jsonify({
+                    'message': 'Karanja Shoe Store API is running',
+                    'b2_bucket': B2_CONFIG['BUCKET_NAME'] if b2_client else 'local',
+                    'products': len(data_store.products),
+                    'status': 'online',
+                    'storage_type': 'b2' if b2_client else 'local',
+                    'endpoints': {
+                        'health': '/api/health',
+                        'login': '/api/auth/login',
+                        'products': '/api/products',
+                        'public_products': '/api/public/products',
+                        'sales': '/api/sales',
+                        'b2_upload': '/api/b2/upload',
+                        'b2_info': '/api/b2/info'
+                    }
+                }), 200
     except Exception as e:
         logger.error(f"Error serving index: {e}")
         return jsonify({'error': 'Could not load index.html'}), 500
 
-# Catch-all route for SPA
+# ==================== CATCH-ALL ROUTE FOR SPA ====================
+# This should be the LAST route
 @app.route('/<path:path>')
 def catch_all(path):
-    """Serve index.html for all non-API routes"""
+    """Serve index.html for all non-API and non-static routes"""
+    # Don't interfere with API routes
     if path.startswith('api/'):
         return jsonify({'error': 'API endpoint not found'}), 404
-    return index()
+    
+    # Don't interfere with static routes
+    if path.startswith('static/'):
+        return jsonify({'error': 'Static file not found'}), 404
+    
+    # For all other routes, serve index.html
+    try:
+        if os.path.exists('index.html'):
+            return send_file('index.html')
+        else:
+            static_index = os.path.join('static', 'index.html')
+            if os.path.exists(static_index):
+                return send_file(static_index)
+    except Exception as e:
+        logger.error(f"Error serving index for path {path}: {e}")
+    
+    return jsonify({'error': 'Page not found'}), 404
 
 # ==================== ERROR HANDLERS ====================
 @app.errorhandler(404)
 def not_found(e):
     if request.path.startswith('/api/'):
         return jsonify({'error': 'API endpoint not found'}), 404
-    return index()
+    if request.path.startswith('/static/'):
+        return jsonify({'error': 'Static file not found'}), 404
+    # For all other 404s, serve the index.html (SPA behavior)
+    try:
+        if os.path.exists('index.html'):
+            return send_file('index.html')
+    except:
+        pass
+    return jsonify({'error': 'Page not found'}), 404
 
 @app.errorhandler(500)
 def internal_server_error(e):
@@ -1132,7 +1381,7 @@ def request_entity_too_large(e):
 def init_sample_data():
     """Initialize sample data if no products exist"""
     try:
-        if len(b2_store.products) == 0:
+        if len(data_store.products) == 0:
             # Create placeholder image
             placeholder_path = os.path.join('static', 'placeholder.png')
             if not os.path.exists(placeholder_path):
@@ -1148,16 +1397,17 @@ def init_sample_data():
                     logger.warning("PIL not installed, skipping placeholder creation")
             
             # Add welcome notification
+            storage_type = 'Backblaze B2' if b2_client else 'Local Storage'
             notification = {
                 'id': int(datetime.now().timestamp() * 1000),
-                'message': f'Welcome to Karanja Shoe Store! Data stored in Backblaze B2 bucket: {B2_CONFIG["BUCKET_NAME"]}',
+                'message': f'Welcome to Karanja Shoe Store! Data stored in {storage_type}',
                 'type': 'info',
                 'timestamp': datetime.now().isoformat(),
                 'read': False
             }
-            b2_store.notifications.insert(0, notification)
-            b2_store.save_notifications()
-            logger.info("Sample data initialized")
+            data_store.notifications.insert(0, notification)
+            data_store.save_notifications()
+            logger.info(f"Sample data initialized with {storage_type}")
     except Exception as e:
         logger.error(f"Error initializing data: {e}")
 
@@ -1167,4 +1417,14 @@ init_sample_data()
 # ==================== RUN APPLICATION ====================
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    
+    # Print storage status on startup
+    if b2_client:
+        logger.info("✓ Backblaze B2 is configured and connected")
+    else:
+        logger.warning("⚠ Backblaze B2 is not configured. Using local storage.")
+        logger.info("To enable B2 storage, set these environment variables:")
+        logger.info("  export B2_ACCESS_KEY_ID=your_key_id")
+        logger.info("  export B2_SECRET_ACCESS_KEY=your_application_key")
+    
     app.run(host='0.0.0.0', port=port, debug=True)
