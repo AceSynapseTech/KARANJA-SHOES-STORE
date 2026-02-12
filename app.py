@@ -1,667 +1,1292 @@
-"""
-KARANJA SHOE STORE - SIMPLIFIED VERSION
-Works on Render with no complex dependencies
-"""
-
 import os
 import json
 import uuid
-from datetime import datetime, timedelta
-from functools import wraps
-from flask import Flask, render_template, request, jsonify, session, send_file
+import hashlib
+import hmac
+import base64
+import datetime
+import requests
+from urllib.parse import quote
+from flask import Flask, render_template, request, jsonify, send_file, make_response
 from flask_cors import CORS
-from dotenv import load_dotenv
-import pytz
-
-load_dotenv()
+from werkzeug.utils import secure_filename
+from functools import wraps
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+import io
+import csv
 
 # ==================== CONFIGURATION ====================
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'karanja-shoe-store-secret-key')
+    # App settings
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'karanja-shoe-store-secret-key-2026')
     DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
     
-    # Business Settings
+    # Backblaze B2 Configuration - from your bucket
+    B2_ENDPOINT = 's3.eu-central-003.backblazeb2.com'
+    B2_BUCKET_NAME = 'karanja-shoe-store'  # Your bucket name
+    B2_BUCKET_ID = '9240b308551f401795cd0d15'  # Your bucket ID
+    B2_REGION = 'eu-central-003'
+    B2_CDN_URL = 'https://f005.backblazeb2.com/file/karanja-shoe-store'  # Public CDN URL
+    
+    # B2 Credentials - Set these in Render environment variables
+    B2_ACCESS_KEY_ID = os.environ.get('B2_ACCESS_KEY_ID', '20385f075dd5')
+    B2_SECRET_ACCESS_KEY = os.environ.get('B2_SECRET_ACCESS_KEY', '')
+    
+    # App settings
+    MAX_IMAGE_SIZE = 20 * 1024 * 1024  # 20MB
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
     CURRENCY = 'KES'
     LOW_STOCK_THRESHOLD = 3
     OLD_STOCK_DAYS = 30
+    
+    # Business plan percentages
     TITHE_PERCENTAGE = 10
     SAVINGS_PERCENTAGE = 20
     RESTOCK_PERCENTAGE = 30
     DEDUCTIONS_PERCENTAGE = 15
     PERSONAL_INCOME_PERCENTAGE = 25
-    BUSINESS_HEALTH_GOAL = 10000
-    
-    # Admin credentials
-    ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@karanjashoes.com')
-    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
-    
-    # Data directory - MUST be writable on Render
-    DATA_DIR = '/tmp/karanja-data'
 
+# ==================== INITIALIZE FLASK ====================
+app = Flask(__name__)
+app.config.from_object(Config)
+app.secret_key = Config.SECRET_KEY
+CORS(app)  # Enable CORS for all routes
 
-# ==================== DATABASE MANAGER ====================
-class DatabaseManager:
+# ==================== BACKBLAZE B2 CLIENT ====================
+class BackblazeB2Client:
     def __init__(self):
-        self.data_dir = Config.DATA_DIR
+        self.access_key_id = Config.B2_ACCESS_KEY_ID
+        self.secret_access_key = Config.B2_SECRET_ACCESS_KEY
+        self.endpoint = Config.B2_ENDPOINT
+        self.bucket_name = Config.B2_BUCKET_NAME
+        self.bucket_id = Config.B2_BUCKET_ID
+        self.region = Config.B2_REGION
+        self.cdn_url = Config.B2_CDN_URL
+        self.client = None
+        self.initialized = False
+        
+        if self.secret_access_key:
+            self.initialize_client()
+    
+    def initialize_client(self):
+        """Initialize B2 client using S3-compatible API"""
+        try:
+            session = boto3.session.Session()
+            self.client = session.client(
+                's3',
+                endpoint_url=f'https://{self.endpoint}',
+                aws_access_key_id=self.access_key_id,
+                aws_secret_access_key=self.secret_access_key,
+                config=Config(signature_version='s3v4', region_name=self.region)
+            )
+            self.initialized = True
+            print("✅ Backblaze B2 client initialized successfully")
+            return True
+        except Exception as e:
+            print(f"❌ Failed to initialize B2 client: {e}")
+            return False
+    
+    def is_initialized(self):
+        return self.initialized and self.client is not None and self.secret_access_key
+    
+    def upload_file(self, file_data, filename, content_type):
+        """Upload a file to Backblaze B2"""
+        if not self.is_initialized():
+            # Generate a CDN URL for demo purposes
+            timestamp = datetime.datetime.now().timestamp()
+            safe_filename = secure_filename(filename)
+            unique_filename = f"{int(timestamp)}_{safe_filename}"
+            public_url = f"{self.cdn_url}/products/{unique_filename}"
+            
+            return {
+                'success': True,
+                'url': public_url,
+                'filename': unique_filename,
+                'bucket': self.bucket_name,
+                'demo_mode': True
+            }
+        
+        try:
+            # Generate unique filename
+            timestamp = datetime.datetime.now().timestamp()
+            safe_filename = secure_filename(filename)
+            unique_filename = f"product_{int(timestamp)}_{safe_filename}"
+            
+            # Upload to B2
+            self.client.put_object(
+                Bucket=self.bucket_name,
+                Key=f"products/{unique_filename}",
+                Body=file_data,
+                ContentType=content_type,
+                ACL='public-read'  # Make publicly accessible
+            )
+            
+            # Generate public URL
+            public_url = f"{self.cdn_url}/products/{unique_filename}"
+            
+            return {
+                'success': True,
+                'url': public_url,
+                'filename': unique_filename,
+                'bucket': self.bucket_name,
+                'bucket_id': self.bucket_id,
+                'endpoint': self.endpoint,
+                'demo_mode': False
+            }
+            
+        except ClientError as e:
+            print(f"B2 Upload Error: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def delete_file(self, filename):
+        """Delete a file from Backblaze B2"""
+        if not self.is_initialized():
+            return {'success': True, 'demo_mode': True}
+        
+        try:
+            self.client.delete_object(
+                Bucket=self.bucket_name,
+                Key=f"products/{filename}"
+            )
+            return {'success': True}
+        except ClientError as e:
+            print(f"B2 Delete Error: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    def get_bucket_info(self):
+        """Get bucket information"""
+        return {
+            'bucket_id': self.bucket_id,
+            'bucket_name': self.bucket_name,
+            'endpoint': self.endpoint,
+            'region': self.region,
+            'cdn_url': self.cdn_url,
+            'created': 'February 9, 2026',
+            'type': 'Private with public read',
+            'file_lifecycle': 'Keep all versions',
+            'encryption': 'Disabled',
+            'cors': 'Enabled'
+        }
+
+# Initialize B2 client
+b2_client = BackblazeB2Client()
+
+# ==================== DATA STORAGE ====================
+# In production, use a proper database. For Render, we'll use JSON files
+class DataStore:
+    def __init__(self):
+        self.data_dir = 'data'
         os.makedirs(self.data_dir, exist_ok=True)
         
         self.products_file = os.path.join(self.data_dir, 'products.json')
         self.sales_file = os.path.join(self.data_dir, 'sales.json')
         self.notifications_file = os.path.join(self.data_dir, 'notifications.json')
+        self.settings_file = os.path.join(self.data_dir, 'settings.json')
+        self.b2_images_file = os.path.join(self.data_dir, 'b2_images.json')
+        self.sale_statements_file = os.path.join(self.data_dir, 'sale_statements.json')
+        self.category_sales_file = os.path.join(self.data_dir, 'category_sales.json')
         
-        self.products = self.load_json(self.products_file, [])
-        self.sales = self.load_json(self.sales_file, [])
-        self.notifications = self.load_json(self.notifications_file, [])
+        self._init_files()
+    
+    def _init_files(self):
+        """Initialize JSON files if they don't exist"""
+        for file in [self.products_file, self.sales_file, self.notifications_file, 
+                     self.settings_file, self.b2_images_file, self.sale_statements_file,
+                     self.category_sales_file]:
+            if not os.path.exists(file):
+                with open(file, 'w') as f:
+                    json.dump([], f)
         
-        print(f"✅ Database initialized at: {self.data_dir}")
-        print(f"📊 Products: {len(self.products)} | Sales: {len(self.sales)}")
+        # Initialize settings
+        if os.path.getsize(self.settings_file) == 0:
+            with open(self.settings_file, 'w') as f:
+                json.dump({
+                    'currency': Config.CURRENCY,
+                    'low_stock_threshold': Config.LOW_STOCK_THRESHOLD,
+                    'old_stock_days': Config.OLD_STOCK_DAYS,
+                    'b2_bucket': Config.B2_BUCKET_ID,
+                    'b2_endpoint': Config.B2_ENDPOINT
+                }, f)
     
-    def load_json(self, filepath, default):
+    def _read_json(self, filepath):
+        """Read JSON file"""
         try:
-            if os.path.exists(filepath):
-                with open(filepath, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Error loading {filepath}: {e}")
-        return default
+            with open(filepath, 'r') as f:
+                content = f.read().strip()
+                return json.loads(content) if content else []
+        except (json.JSONDecodeError, FileNotFoundError):
+            return []
     
-    def save_json(self, filepath, data):
-        try:
-            with open(filepath, 'w') as f:
-                json.dump(data, f, indent=2)
-            return True
-        except Exception as e:
-            print(f"Error saving {filepath}: {e}")
-            return False
+    def _write_json(self, filepath, data):
+        """Write JSON file"""
+        with open(filepath, 'w') as f:
+            json.dump(data, f, indent=2)
     
     # Products
     def get_products(self):
-        return self.products
+        return self._read_json(self.products_file)
     
-    def get_product(self, product_id):
-        for p in self.products:
-            if p.get('id') == product_id:
-                return p
-        return None
-    
-    def add_product(self, data):
-        product = {
-            'id': str(uuid.uuid4()),
-            'name': data.get('name', ''),
-            'sku': data.get('sku', ''),
-            'category': data.get('category', ''),
-            'color': data.get('color', ''),
-            'sizes': data.get('sizes', {}),
-            'buy_price': float(data.get('buy_price', 0)),
-            'min_sell_price': float(data.get('min_sell_price', 0)),
-            'max_sell_price': float(data.get('max_sell_price', 0)),
-            'description': data.get('description', ''),
-            'image': data.get('image', 'https://via.placeholder.com/300'),
-            'date_added': datetime.now().isoformat(),
-            'total_stock': self.calculate_stock(data.get('sizes', {}))
-        }
-        self.products.append(product)
-        self.save_json(self.products_file, self.products)
-        return product
-    
-    def update_product(self, product_id, updates):
-        for i, p in enumerate(self.products):
-            if p.get('id') == product_id:
-                p.update(updates)
-                if 'sizes' in updates:
-                    p['total_stock'] = self.calculate_stock(p['sizes'])
-                self.products[i] = p
-                self.save_json(self.products_file, self.products)
-                return p
-        return None
-    
-    def delete_product(self, product_id):
-        for i, p in enumerate(self.products):
-            if p.get('id') == product_id:
-                deleted = self.products.pop(i)
-                self.save_json(self.products_file, self.products)
-                return deleted
-        return None
-    
-    def calculate_stock(self, sizes):
-        total = 0
-        for size, stock in sizes.items():
-            try:
-                total += int(stock)
-            except:
-                pass
-        return total
+    def save_products(self, products):
+        self._write_json(self.products_file, products)
     
     # Sales
     def get_sales(self):
-        return self.sales
+        return self._read_json(self.sales_file)
     
-    def add_sale(self, data):
-        sale = {
-            'id': str(uuid.uuid4()),
-            'product_id': data.get('product_id'),
-            'product_name': data.get('product_name'),
-            'product_sku': data.get('product_sku'),
-            'size': data.get('size'),
-            'quantity': int(data.get('quantity', 1)),
-            'unit_price': float(data.get('unit_price', 0)),
-            'unit_cost': float(data.get('unit_cost', 0)),
-            'total_amount': int(data.get('quantity', 1)) * float(data.get('unit_price', 0)),
-            'total_profit': (int(data.get('quantity', 1)) * float(data.get('unit_price', 0))) - 
-                           (int(data.get('quantity', 1)) * float(data.get('unit_cost', 0))),
-            'customer_name': data.get('customer_name', 'Walk-in Customer'),
-            'notes': data.get('notes', ''),
-            'is_bargain': data.get('is_bargain', False),
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        self.sales.insert(0, sale)
-        if len(self.sales) > 1000:
-            self.sales = self.sales[:1000]
-        self.save_json(self.sales_file, self.sales)
-        
-        # Update stock
-        product = self.get_product(sale['product_id'])
-        if product and 'sizes' in product:
-            size = str(sale['size'])
-            if size in product['sizes']:
-                product['sizes'][size] = max(0, int(product['sizes'][size]) - sale['quantity'])
-                self.update_product(product['id'], {'sizes': product['sizes']})
-        
-        return sale
-    
-    def get_today_sales(self):
-        today = datetime.now().date()
-        result = []
-        for sale in self.sales:
-            try:
-                sale_date = datetime.fromisoformat(sale['timestamp']).date()
-                if sale_date == today:
-                    result.append(sale)
-            except:
-                pass
-        return result
-    
-    def get_sales_by_period(self, days):
-        cutoff = datetime.now() - timedelta(days=days)
-        result = []
-        for sale in self.sales:
-            try:
-                sale_date = datetime.fromisoformat(sale['timestamp'])
-                if sale_date >= cutoff:
-                    result.append(sale)
-            except:
-                pass
-        return result
+    def save_sales(self, sales):
+        self._write_json(self.sales_file, sales)
     
     # Notifications
-    def add_notification(self, message, type='info'):
-        notification = {
-            'id': str(uuid.uuid4()),
-            'message': message,
-            'type': type,
-            'timestamp': datetime.now().isoformat(),
-            'read': False
-        }
-        self.notifications.insert(0, notification)
-        if len(self.notifications) > 100:
-            self.notifications = self.notifications[:100]
-        self.save_json(self.notifications_file, self.notifications)
-        return notification
+    def get_notifications(self):
+        return self._read_json(self.notifications_file)
     
-    def get_notifications(self, limit=20):
-        return sorted(self.notifications, key=lambda x: x.get('timestamp', ''), reverse=True)[:limit]
+    def save_notifications(self, notifications):
+        self._write_json(self.notifications_file, notifications)
     
-    def mark_notifications_read(self):
-        for n in self.notifications:
-            n['read'] = True
-        self.save_json(self.notifications_file, self.notifications)
+    # Settings
+    def get_settings(self):
+        data = self._read_json(self.settings_file)
+        return data if isinstance(data, dict) else {}
     
-    def get_unread_count(self):
-        return sum(1 for n in self.notifications if not n.get('read', False))
+    def save_settings(self, settings):
+        self._write_json(self.settings_file, settings)
     
-    # Stats
-    def get_dashboard_stats(self, days=None):
-        if days:
-            sales = self.get_sales_by_period(days)
-        else:
-            sales = self.sales
-        
-        today_sales = self.get_today_sales()
-        
+    # B2 Images
+    def get_b2_images(self):
+        return self._read_json(self.b2_images_file)
+    
+    def save_b2_images(self, images):
+        self._write_json(self.b2_images_file, images)
+    
+    # Sale Statements
+    def get_sale_statements(self):
+        return self._read_json(self.sale_statements_file)
+    
+    def save_sale_statements(self, statements):
+        self._write_json(self.sale_statements_file, statements)
+    
+    # Category Sales
+    def get_category_sales(self):
+        return self._read_json(self.category_sales_file)
+    
+    def save_category_sales(self, data):
+        self._write_json(self.category_sales_file, data)
+
+# Initialize data store
+data_store = DataStore()
+
+# ==================== AUTHENTICATION ====================
+def authenticate(email, password):
+    """Simple authentication - in production, use proper auth"""
+    if email and password and '@' in email and len(password) >= 6:
         return {
-            'total_sales': sum(s.get('total_amount', 0) for s in sales),
-            'total_profit': sum(s.get('total_profit', 0) for s in sales),
-            'total_stock': sum(p.get('total_stock', 0) for p in self.products),
-            'total_products': len(self.products),
-            'today_sales': sum(s.get('total_amount', 0) for s in today_sales),
-            'today_profit': sum(s.get('total_profit', 0) for s in today_sales),
-            'today_items': sum(s.get('quantity', 0) for s in today_sales)
+            'success': True,
+            'user': {
+                'email': email,
+                'name': email.split('@')[0].replace('.', ' ').replace('-', ' ').title(),
+                'role': 'admin',
+                'login_time': datetime.datetime.now().isoformat()
+            }
         }
-    
-    # Business Plan
-    def get_business_plan(self):
-        total_profit = sum(s.get('total_profit', 0) for s in self.sales)
-        total_revenue = sum(s.get('total_amount', 0) for s in self.sales)
-        
-        return {
-            'total_revenue': total_revenue,
-            'total_profit': total_profit,
-            'tithe': total_profit * 0.1,
-            'savings': total_profit * 0.2,
-            'restock': total_profit * 0.3,
-            'deductions': total_profit * 0.15,
-            'personal_income': total_profit * 0.25,
-            'profit_margin': (total_profit / total_revenue * 100) if total_revenue > 0 else 0
-        }
-    
-    def get_business_health(self):
-        revenue = sum(s.get('total_amount', 0) for s in self.sales)
-        profit = sum(s.get('total_profit', 0) for s in self.sales)
-        
-        revenue_score = min(100, (revenue / 10000) * 100)
-        profit_margin = (profit / revenue * 100) if revenue > 0 else 0
-        profit_score = min(100, profit_margin * 2)
-        health_score = int((revenue_score * 0.5) + (profit_score * 0.5))
-        
-        if health_score >= 80:
-            status = "Excellent"
-        elif health_score >= 60:
-            status = "Good"
-        elif health_score >= 40:
-            status = "Fair"
-        else:
-            status = "Needs Improvement"
-        
-        return {'score': health_score, 'status': status}
-    
-    # Stock Alerts
-    def get_stock_alerts(self):
-        alerts = []
-        for product in self.products:
-            for size, stock in product.get('sizes', {}).items():
-                try:
-                    if 0 < int(stock) <= Config.LOW_STOCK_THRESHOLD:
-                        alerts.append({
-                            'type': 'low_stock',
-                            'product': product.get('name'),
-                            'size': size,
-                            'stock': int(stock),
-                            'message': f"{product.get('name')} (Size {size}) - only {stock} left!"
-                        })
-                except:
-                    pass
-        return alerts
-    
-    @staticmethod
-    def format_currency(amount):
-        return f"KES {float(amount):,.2f}"
+    return {'success': False, 'error': 'Invalid credentials'}
 
-
-# ==================== FLASK APP ====================
-app = Flask(__name__)
-app.config.from_object(Config)
-app.secret_key = Config.SECRET_KEY
-CORS(app)
-
-db = DatabaseManager()
-
-
-# ==================== AUTH DECORATOR ====================
 def login_required(f):
+    """Decorator for routes that require authentication"""
     @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get('logged_in'):
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authentication required'}), 401
+        
+        # Simple token validation - in production use JWT
+        token = auth_header.replace('Bearer ', '')
+        if token != app.secret_key:
+            return jsonify({'error': 'Invalid token'}), 401
+        
         return f(*args, **kwargs)
-    return decorated
+    return decorated_function
 
+# ==================== UTILITY FUNCTIONS ====================
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
+
+def format_currency(amount):
+    """Format amount as currency"""
+    return f"{Config.CURRENCY} {float(amount):,.2f}"
+
+def calculate_total_stock(product):
+    """Calculate total stock from sizes"""
+    total = 0
+    if product.get('sizes'):
+        for stock in product['sizes'].values():
+            total += int(stock) if stock else 0
+    return total
+
+def generate_sku():
+    """Generate a unique SKU"""
+    return f"KS-{str(uuid.uuid4())[:8].upper()}"
 
 # ==================== ROUTES ====================
+
 @app.route('/')
 def index():
     """Serve the main application"""
-    template_path = os.path.join(app.root_path, 'templates', 'index.html')
-    
-    # Check if template exists
-    if not os.path.exists(template_path):
-        print(f"❌ TEMPLATE NOT FOUND: {template_path}")
-        return f"""
-        <html>
-            <head><title>Karanja Shoe Store - Error</title></head>
-            <body style="font-family: Arial; padding: 40px; text-align: center;">
-                <h1 style="color: #ff5722;">⚠️ Template Not Found</h1>
-                <p>The application is running but the HTML template is missing.</p>
-                <p><strong>Expected path:</strong> {template_path}</p>
-                <p><strong>Current directory:</strong> {os.getcwd()}</p>
-                <p><strong>Files in current directory:</strong></p>
-                <pre>{os.listdir('.')}</pre>
-                <p><strong>Files in templates directory (if exists):</strong></p>
-                <pre>{os.listdir('templates') if os.path.exists('templates') else 'templates/ directory not found'}</pre>
-                <hr>
-                <p><strong>Solution:</strong> Create the templates folder and add index.html</p>
-                <pre style="background: #f4f4f4; padding: 20px; text-align: left;">
-mkdir -p templates
-# Copy your HTML code to templates/index.html
-                </pre>
-            </body>
-        </html>
-        """, 200
-    
-    try:
-        return render_template('index.html')
-    except Exception as e:
-        return f"Error rendering template: {str(e)}", 500
+    return render_template('index.html')
 
-
-@app.route('/api/health')
-def health():
-    template_path = os.path.join(app.root_path, 'templates', 'index.html')
-    return jsonify({
-        'status': 'ok',
-        'template_exists': os.path.exists(template_path),
-        'template_path': template_path,
-        'data_dir': db.data_dir,
-        'data_writable': os.access(db.data_dir, os.W_OK) if os.path.exists(db.data_dir) else False,
-        'products': len(db.products),
-        'sales': len(db.sales)
-    })
-
-
-# ==================== AUTH ====================
-@app.route('/api/login', methods=['POST'])
+@app.route('/api/auth/login', methods=['POST'])
 def login():
+    """Authenticate user"""
     data = request.json
-    if data.get('email') == Config.ADMIN_EMAIL and data.get('password') == Config.ADMIN_PASSWORD:
-        session['logged_in'] = True
-        session['user'] = {'email': Config.ADMIN_EMAIL, 'name': 'Admin Karanja'}
-        return jsonify({'success': True, 'user': session['user']})
-    return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+    email = data.get('email')
+    password = data.get('password')
+    
+    result = authenticate(email, password)
+    if result['success']:
+        return jsonify({
+            'success': True,
+            'token': app.secret_key,
+            'user': result['user']
+        })
+    return jsonify(result), 401
 
+@app.route('/api/auth/verify', methods=['GET'])
+@login_required
+def verify_token():
+    """Verify authentication token"""
+    return jsonify({'valid': True})
 
-@app.route('/api/logout', methods=['POST'])
-def logout():
-    session.clear()
-    return jsonify({'success': True})
+# ==================== PRODUCT ROUTES ====================
 
-
-@app.route('/api/session')
-def get_session():
-    return jsonify({
-        'logged_in': session.get('logged_in', False),
-        'user': session.get('user')
-    })
-
-
-# ==================== PRODUCTS ====================
 @app.route('/api/products', methods=['GET'])
 @login_required
 def get_products():
-    return jsonify(db.get_products())
+    """Get all products"""
+    products = data_store.get_products()
+    
+    # Calculate total stock for each product
+    for product in products:
+        product['totalStock'] = calculate_total_stock(product)
+    
+    return jsonify(products)
 
+@app.route('/api/products/<int:product_id>', methods=['GET'])
+@login_required
+def get_product(product_id):
+    """Get a single product"""
+    products = data_store.get_products()
+    product = next((p for p in products if p['id'] == product_id), None)
+    
+    if product:
+        product['totalStock'] = calculate_total_stock(product)
+        return jsonify(product)
+    return jsonify({'error': 'Product not found'}), 404
 
 @app.route('/api/products', methods=['POST'])
 @login_required
 def create_product():
+    """Create a new product"""
     try:
-        data = request.form.to_dict()
+        data = request.json
         
-        # Parse sizes JSON
-        if 'sizes' in data and isinstance(data['sizes'], str):
-            try:
-                data['sizes'] = json.loads(data['sizes'])
-            except:
-                data['sizes'] = {}
+        # Validate required fields
+        required_fields = ['name', 'category', 'color', 'buyPrice', 'minSellPrice', 'maxSellPrice', 'sizes']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        product = db.add_product(data)
-        db.add_notification(f"New product: {product.get('name')}", 'success')
+        # Create product
+        product = {
+            'id': int(datetime.datetime.now().timestamp() * 1000),
+            'name': data['name'].strip(),
+            'sku': data.get('sku', generate_sku()),
+            'category': data['category'],
+            'color': data['color'].strip(),
+            'sizes': data['sizes'],
+            'buyPrice': float(data['buyPrice']),
+            'minSellPrice': float(data['minSellPrice']),
+            'maxSellPrice': float(data['maxSellPrice']),
+            'description': data.get('description', '').strip(),
+            'image': data.get('image', 'https://via.placeholder.com/300x300?text=Shoe+Image'),
+            'storage': data.get('storage', {
+                'type': 'backblaze-b2',
+                'bucket': Config.B2_BUCKET_ID,
+                'bucketName': Config.B2_BUCKET_NAME,
+                'endpoint': Config.B2_ENDPOINT,
+                'uploadedAt': datetime.datetime.now().isoformat()
+            }),
+            'dateAdded': datetime.datetime.now().isoformat(),
+            'lastUpdated': datetime.datetime.now().isoformat()
+        }
+        
+        # Calculate total stock
+        product['totalStock'] = calculate_total_stock(product)
+        
+        # Save product
+        products = data_store.get_products()
+        products.append(product)
+        data_store.save_products(products)
+        
+        # Add notification
+        add_notification(f"New product added: {product['name']}", 'success')
+        
         return jsonify(product), 201
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-@app.route('/api/products/<product_id>', methods=['PUT'])
+@app.route('/api/products/<int:product_id>', methods=['PUT'])
 @login_required
 def update_product(product_id):
+    """Update a product"""
     try:
-        data = request.form.to_dict()
-        if 'sizes' in data and isinstance(data['sizes'], str):
-            try:
-                data['sizes'] = json.loads(data['sizes'])
-            except:
-                data['sizes'] = {}
+        data = request.json
+        products = data_store.get_products()
         
-        product = db.update_product(product_id, data)
-        if product:
-            return jsonify(product)
-        return jsonify({'error': 'Not found'}), 404
+        for i, product in enumerate(products):
+            if product['id'] == product_id:
+                # Update fields
+                product.update({
+                    'name': data.get('name', product['name']),
+                    'sku': data.get('sku', product['sku']),
+                    'category': data.get('category', product['category']),
+                    'color': data.get('color', product['color']),
+                    'sizes': data.get('sizes', product['sizes']),
+                    'buyPrice': float(data.get('buyPrice', product['buyPrice'])),
+                    'minSellPrice': float(data.get('minSellPrice', product['minSellPrice'])),
+                    'maxSellPrice': float(data.get('maxSellPrice', product['maxSellPrice'])),
+                    'description': data.get('description', product['description']),
+                    'image': data.get('image', product['image']),
+                    'lastUpdated': datetime.datetime.now().isoformat()
+                })
+                
+                # Update total stock
+                product['totalStock'] = calculate_total_stock(product)
+                
+                data_store.save_products(products)
+                
+                # Add notification
+                add_notification(f"Product updated: {product['name']}", 'info')
+                
+                return jsonify(product)
+        
+        return jsonify({'error': 'Product not found'}), 404
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-@app.route('/api/products/<product_id>', methods=['DELETE'])
+@app.route('/api/products/<int:product_id>', methods=['DELETE'])
 @login_required
 def delete_product(product_id):
-    product = db.delete_product(product_id)
-    if product:
-        db.add_notification(f"Deleted: {product.get('name')}", 'warning')
-        return jsonify({'success': True})
-    return jsonify({'error': 'Not found'}), 404
+    """Delete a product"""
+    products = data_store.get_products()
+    
+    for i, product in enumerate(products):
+        if product['id'] == product_id:
+            deleted = products.pop(i)
+            data_store.save_products(products)
+            
+            # Add notification
+            add_notification(f"Product deleted: {deleted['name']}", 'warning')
+            
+            return jsonify({'success': True, 'product': deleted})
+    
+    return jsonify({'error': 'Product not found'}), 404
 
+# ==================== BACKBLAZE B2 ROUTES ====================
 
-# ==================== SALES ====================
+@app.route('/api/b2/upload', methods=['POST'])
+@login_required
+def upload_to_b2():
+    """Upload an image to Backblaze B2"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'File type not allowed'}), 400
+        
+        # Read file data
+        file_data = file.read()
+        
+        if len(file_data) > Config.MAX_IMAGE_SIZE:
+            return jsonify({'error': 'File size exceeds 20MB'}), 400
+        
+        # Upload to B2
+        result = b2_client.upload_file(
+            file_data,
+            file.filename,
+            file.content_type
+        )
+        
+        if result['success']:
+            # Store B2 image record
+            b2_images = data_store.get_b2_images()
+            b2_image_record = {
+                'id': int(datetime.datetime.now().timestamp() * 1000),
+                'url': result['url'],
+                'filename': result['filename'],
+                'bucket': result.get('bucket'),
+                'bucket_id': result.get('bucket_id'),
+                'endpoint': result.get('endpoint'),
+                'demo_mode': result.get('demo_mode', False),
+                'uploadedAt': datetime.datetime.now().isoformat()
+            }
+            b2_images.append(b2_image_record)
+            data_store.save_b2_images(b2_images)
+            
+            return jsonify({
+                'success': True,
+                'url': result['url'],
+                'filename': result['filename'],
+                'bucket_info': b2_client.get_bucket_info()
+            })
+        else:
+            return jsonify({'error': result.get('error', 'Upload failed')}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/b2/info', methods=['GET'])
+@login_required
+def get_b2_info():
+    """Get Backblaze B2 bucket information"""
+    return jsonify(b2_client.get_bucket_info())
+
+@app.route('/api/b2/images', methods=['GET'])
+@login_required
+def get_b2_images():
+    """Get all B2 images"""
+    images = data_store.get_b2_images()
+    return jsonify(images[-50:])  # Return last 50 images
+
+# ==================== SALE ROUTES ====================
+
 @app.route('/api/sales', methods=['GET'])
 @login_required
 def get_sales():
-    period = request.args.get('period')
-    if period == 'today':
-        sales = db.get_today_sales()
-    elif period == '7days':
-        sales = db.get_sales_by_period(7)
-    elif period == '30days':
-        sales = db.get_sales_by_period(30)
-    else:
-        sales = db.get_sales()
+    """Get all sales"""
+    sales = data_store.get_sales()
+    
+    # Sort by date (newest first)
+    sales.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    
     return jsonify(sales)
-
 
 @app.route('/api/sales', methods=['POST'])
 @login_required
 def create_sale():
+    """Record a new sale"""
     try:
         data = request.json
-        sale = db.add_sale(data)
         
-        # Add alerts
-        for alert in db.get_stock_alerts()[:3]:
-            db.add_notification(alert['message'], 'warning')
+        # Validate required fields
+        required_fields = ['productId', 'productName', 'productSKU', 'size', 
+                          'quantity', 'unitPrice', 'totalAmount', 'totalProfit']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        return jsonify(sale), 201
+        # Create sale record
+        sale = {
+            'id': int(datetime.datetime.now().timestamp() * 1000),
+            'timestamp': datetime.datetime.now().isoformat(),
+            'statementId': f"{int(datetime.datetime.now().timestamp() * 1000)}-SALE",
+            **data
+        }
+        
+        # Update product stock
+        products = data_store.get_products()
+        for i, product in enumerate(products):
+            if product['id'] == sale['productId']:
+                if product['sizes'].get(str(sale['size']), 0) >= sale['quantity']:
+                    product['sizes'][str(sale['size'])] -= sale['quantity']
+                    product['lastUpdated'] = datetime.datetime.now().isoformat()
+                    product['totalStock'] = calculate_total_stock(product)
+                    
+                    data_store.save_products(products)
+                    
+                    # Record monthly category sale
+                    record_monthly_category_sale(
+                        product['category'],
+                        sale['totalAmount'],
+                        sale['quantity'],
+                        sale['totalProfit']
+                    )
+                    
+                    break
+                else:
+                    return jsonify({'error': 'Insufficient stock'}), 400
+        
+        # Save sale
+        sales = data_store.get_sales()
+        sales.insert(0, sale)  # Add to beginning
+        data_store.save_sales(sales)
+        
+        # Generate sale statement
+        statement = {
+            'id': sale['statementId'],
+            'saleId': sale['id'],
+            'timestamp': sale['timestamp'],
+            'productName': sale['productName'],
+            'productSKU': sale['productSKU'],
+            'productColor': data.get('productColor', 'N/A'),
+            'category': data.get('category', 'N/A'),
+            'size': sale['size'],
+            'quantity': sale['quantity'],
+            'unitPrice': sale['unitPrice'],
+            'totalAmount': sale['totalAmount'],
+            'totalProfit': sale['totalProfit'],
+            'customerName': data.get('customerName', 'Walk-in Customer'),
+            'isBargain': data.get('isBargain', False),
+            'notes': data.get('notes', 'No additional notes')
+        }
+        
+        statements = data_store.get_sale_statements()
+        statements.insert(0, statement)
+        if len(statements) > 100:
+            statements = statements[:100]
+        data_store.save_sale_statements(statements)
+        
+        # Add notification
+        add_notification(
+            f"Sale recorded: {sale['productName']} ({sale['quantity']} × Size {sale['size']})",
+            'success'
+        )
+        
+        return jsonify({
+            'success': True,
+            'sale': sale,
+            'statement': statement
+        }), 201
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-# ==================== STATS ====================
-@app.route('/api/stats', methods=['GET'])
+@app.route('/api/sales/statements', methods=['GET'])
 @login_required
-def get_stats():
+def get_sale_statements():
+    """Get all sale statements"""
+    statements = data_store.get_sale_statements()
+    return jsonify(statements)
+
+@app.route('/api/sales/statements/<int:sale_id>', methods=['GET'])
+@login_required
+def get_sale_statement(sale_id):
+    """Get a specific sale statement"""
+    statements = data_store.get_sale_statements()
+    statement = next((s for s in statements if s['saleId'] == sale_id), None)
+    
+    if statement:
+        return jsonify(statement)
+    return jsonify({'error': 'Statement not found'}), 404
+
+# ==================== ANALYTICS ROUTES ====================
+
+@app.route('/api/analytics/dashboard', methods=['GET'])
+@login_required
+def get_dashboard_data():
+    """Get dashboard analytics"""
     period = request.args.get('period', 'today')
-    days = {'today': 1, '7days': 7, '1month': 30, '6months': 180}.get(period)
-    stats = db.get_dashboard_stats(days)
-    stats['period'] = period
-    return jsonify(stats)
+    sales = data_store.get_sales()
+    products = data_store.get_products()
+    
+    # Calculate date range
+    now = datetime.datetime.now()
+    start_date = now
+    
+    if period == 'today':
+        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == '7days':
+        start_date = now - datetime.timedelta(days=7)
+    elif period == '1month':
+        start_date = now - datetime.timedelta(days=30)
+    elif period == '6months':
+        start_date = now - datetime.timedelta(days=180)
+    elif period == '12months':
+        start_date = now - datetime.timedelta(days=365)
+    
+    # Filter sales by period
+    filtered_sales = [
+        s for s in sales 
+        if datetime.datetime.fromisoformat(s['timestamp']) >= start_date
+    ]
+    
+    # Calculate totals
+    total_revenue = sum(s.get('totalAmount', 0) for s in filtered_sales)
+    total_profit = sum(s.get('totalProfit', 0) for s in filtered_sales)
+    total_stock = sum(p.get('totalStock', 0) for p in products)
+    total_products = len(products)
+    
+    # Today's sales
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_sales = [
+        s for s in sales 
+        if datetime.datetime.fromisoformat(s['timestamp']) >= today_start
+    ]
+    
+    today_revenue = sum(s.get('totalAmount', 0) for s in today_sales)
+    today_profit = sum(s.get('totalProfit', 0) for s in today_sales)
+    today_items = sum(s.get('quantity', 0) for s in today_sales)
+    
+    # Top products
+    product_sales = {}
+    for sale in filtered_sales:
+        name = sale.get('productName', 'Unknown')
+        product_sales[name] = product_sales.get(name, 0) + sale.get('quantity', 0)
+    
+    top_products = [
+        {'name': k, 'units': v} 
+        for k, v in sorted(product_sales.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
+    
+    # Daily sales for chart
+    daily_sales = {}
+    days_to_show = min(30, len(filtered_sales) if len(filtered_sales) > 0 else 30)
+    
+    for i in range(days_to_show):
+        date = now - datetime.timedelta(days=i)
+        date_str = date.strftime('%Y-%m-%d')
+        daily_sales[date_str] = 0
+    
+    for sale in filtered_sales:
+        sale_date = datetime.datetime.fromisoformat(sale['timestamp']).strftime('%Y-%m-%d')
+        if sale_date in daily_sales:
+            daily_sales[sale_date] += sale.get('totalAmount', 0)
+    
+    return jsonify({
+        'period': period,
+        'totalRevenue': total_revenue,
+        'totalProfit': total_profit,
+        'totalStock': total_stock,
+        'totalProducts': total_products,
+        'todayRevenue': today_revenue,
+        'todayProfit': today_profit,
+        'todayItems': today_items,
+        'topProducts': top_products,
+        'dailySales': [
+            {'date': date, 'revenue': amount}
+            for date, amount in sorted(daily_sales.items())
+        ]
+    })
 
+@app.route('/api/analytics/categories', methods=['GET'])
+@login_required
+def get_category_analytics():
+    """Get category sales analytics"""
+    period = request.args.get('period', 'current')
+    category_sales = data_store.get_category_sales()
+    
+    now = datetime.datetime.now()
+    
+    if period == 'current':
+        month_key = now.strftime('%Y-%m')
+    elif period == 'last':
+        last_month = now - datetime.timedelta(days=30)
+        month_key = last_month.strftime('%Y-%m')
+    elif period == 'last3':
+        # Aggregate last 3 months
+        aggregated = {}
+        for i in range(3):
+            date = now - datetime.timedelta(days=30 * i)
+            key = date.strftime('%Y-%m')
+            if key in category_sales:
+                for category, data in category_sales[key].items():
+                    if category not in aggregated:
+                        aggregated[category] = {
+                            'revenue': 0,
+                            'quantity': 0,
+                            'profit': 0
+                        }
+                    aggregated[category]['revenue'] += data.get('revenue', 0)
+                    aggregated[category]['quantity'] += data.get('quantity', 0)
+                    aggregated[category]['profit'] += data.get('profit', 0)
+        
+        # Calculate rankings
+        rankings = []
+        total_revenue = sum(c['revenue'] for c in aggregated.values())
+        
+        for category, data in aggregated.items():
+            market_share = (data['revenue'] / total_revenue * 100) if total_revenue > 0 else 0
+            
+            # Determine demand level
+            demand_level = 'Medium'
+            if data['revenue'] > 50000:
+                demand_level = 'Very High'
+            elif data['revenue'] > 20000:
+                demand_level = 'High'
+            elif data['revenue'] < 5000:
+                demand_level = 'Low'
+            elif data['revenue'] < 1000:
+                demand_level = 'Very Low'
+            
+            rankings.append({
+                'category': category,
+                'revenue': data['revenue'],
+                'quantity': data['quantity'],
+                'profit': data['profit'],
+                'marketShare': round(market_share, 1),
+                'demandLevel': demand_level
+            })
+        
+        rankings.sort(key=lambda x: x['revenue'], reverse=True)
+        
+        return jsonify({
+            'period': period,
+            'month': 'Last 3 Months',
+            'rankings': rankings,
+            'totalRevenue': total_revenue,
+            'totalQuantity': sum(c['quantity'] for c in aggregated.values()),
+            'totalProfit': sum(c['profit'] for c in aggregated.values())
+        })
+    else:
+        # Single month
+        month_data = category_sales.get(month_key, {})
+        
+        rankings = []
+        total_revenue = sum(c.get('revenue', 0) for c in month_data.values())
+        
+        for category, data in month_data.items():
+            market_share = (data.get('revenue', 0) / total_revenue * 100) if total_revenue > 0 else 0
+            
+            # Determine demand level
+            demand_level = 'Medium'
+            if data.get('revenue', 0) > 50000:
+                demand_level = 'Very High'
+            elif data.get('revenue', 0) > 20000:
+                demand_level = 'High'
+            elif data.get('revenue', 0) < 5000:
+                demand_level = 'Low'
+            elif data.get('revenue', 0) < 1000:
+                demand_level = 'Very Low'
+            
+            rankings.append({
+                'category': category,
+                'revenue': data.get('revenue', 0),
+                'quantity': data.get('quantity', 0),
+                'profit': data.get('profit', 0),
+                'marketShare': round(market_share, 1),
+                'demandLevel': demand_level
+            })
+        
+        rankings.sort(key=lambda x: x['revenue'], reverse=True)
+        
+        return jsonify({
+            'period': period,
+            'month': now.strftime('%B %Y'),
+            'rankings': rankings,
+            'totalRevenue': total_revenue,
+            'totalQuantity': sum(c.get('quantity', 0) for c in month_data.values()),
+            'totalProfit': sum(c.get('profit', 0) for c in month_data.values())
+        })
 
-# ==================== NOTIFICATIONS ====================
+@app.route('/api/analytics/budget', methods=['GET'])
+@login_required
+def get_budget_plan():
+    """Get bi-weekly budget plan"""
+    sales = data_store.get_sales()
+    
+    # Last 14 days
+    now = datetime.datetime.now()
+    start_date = now - datetime.timedelta(days=14)
+    
+    recent_sales = [
+        s for s in sales
+        if datetime.datetime.fromisoformat(s['timestamp']) >= start_date
+    ]
+    
+    total_revenue = sum(s.get('totalAmount', 0) for s in recent_sales)
+    total_profit = sum(s.get('totalProfit', 0) for s in recent_sales)
+    avg_daily_revenue = total_revenue / 14 if total_revenue > 0 else 0
+    profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0
+    
+    # Calculate budget (30% of profit, minimum 1000)
+    weekly_budget = max(total_profit * 0.3, 1000)
+    
+    # Get category performance
+    products = data_store.get_products()
+    category_sales = {}
+    
+    for sale in recent_sales:
+        product = next((p for p in products if p['id'] == sale['productId']), None)
+        if product:
+            category = product.get('category', 'Other')
+            if category not in category_sales:
+                category_sales[category] = {
+                    'revenue': 0,
+                    'quantity': 0
+                }
+            category_sales[category]['revenue'] += sale.get('totalAmount', 0)
+            category_sales[category]['quantity'] += sale.get('quantity', 0)
+    
+    # High demand categories
+    high_demand = []
+    low_demand = []
+    
+    for category, data in category_sales.items():
+        if data['revenue'] > 20000:
+            high_demand.append({
+                'category': category,
+                'revenue': data['revenue'],
+                'quantity': data['quantity']
+            })
+        elif data['revenue'] < 5000:
+            low_demand.append({
+                'category': category,
+                'revenue': data['revenue'],
+                'quantity': data['quantity']
+            })
+    
+    high_demand.sort(key=lambda x: x['revenue'], reverse=True)
+    low_demand.sort(key=lambda x: x['revenue'])
+    
+    # Restock recommendations
+    restock_recommendations = []
+    for product in products:
+        product_sales = [
+            s for s in recent_sales 
+            if s['productId'] == product['id']
+        ]
+        sales_count = sum(s.get('quantity', 0) for s in product_sales)
+        
+        days_in_stock = (now - datetime.datetime.fromisoformat(product.get('dateAdded', now.isoformat()))).days
+        days_in_stock = max(days_in_stock, 1)
+        
+        if sales_count > 0 and product.get('totalStock', 0) < 5 and days_in_stock < 30:
+            sales_velocity = sales_count / days_in_stock
+            if sales_velocity > 0.1:
+                restock_recommendations.append({
+                    'product': product.get('name'),
+                    'currentStock': product.get('totalStock', 0),
+                    'salesVelocity': round(sales_velocity, 2),
+                    'recommendation': f"Restock {int(sales_velocity * 14)} units for next 2 weeks"
+                })
+    
+    # Budget allocation
+    budget_allocation = [
+        {'category': 'High Demand Products', 'percentage': 50, 'amount': weekly_budget * 0.5},
+        {'category': 'Restock Fast Movers', 'percentage': 30, 'amount': weekly_budget * 0.3},
+        {'category': 'New Opportunities', 'percentage': 15, 'amount': weekly_budget * 0.15},
+        {'category': 'Emergency Buffer', 'percentage': 5, 'amount': weekly_budget * 0.05}
+    ]
+    
+    recommendation = (
+        f"Based on last 2 weeks' profit of {format_currency(total_profit)} "
+        f"({profit_margin:.1f}% margin), allocate {format_currency(weekly_budget)} for inventory. "
+        f"Focus on {', '.join([c['category'] for c in high_demand[:3]])}."
+    ) if total_profit > 0 else "Not enough data for budget planning. Start making more sales."
+    
+    return jsonify({
+        'totalRevenue': total_revenue,
+        'totalProfit': total_profit,
+        'avgDailyRevenue': avg_daily_revenue,
+        'profitMargin': round(profit_margin, 1),
+        'weeklyBudget': weekly_budget,
+        'highDemand': high_demand[:5],
+        'lowDemand': low_demand[:5],
+        'restockRecommendations': restock_recommendations[:5],
+        'budgetAllocation': budget_allocation,
+        'recommendation': recommendation
+    })
+
+@app.route('/api/analytics/stock-alerts', methods=['GET'])
+@login_required
+def get_stock_alerts():
+    """Get stock alerts"""
+    products = data_store.get_products()
+    alerts = []
+    
+    now = datetime.datetime.now()
+    
+    for product in products:
+        # Low stock alerts
+        if product.get('sizes'):
+            for size, stock in product['sizes'].items():
+                if stock > 0 and stock <= Config.LOW_STOCK_THRESHOLD:
+                    alerts.append({
+                        'type': 'low_stock',
+                        'product': product.get('name'),
+                        'size': size,
+                        'stock': stock,
+                        'message': f"{product.get('name')} (Size {size}) is running low - only {stock} left!"
+                    })
+        
+        # Old stock alerts
+        date_added = datetime.datetime.fromisoformat(product.get('dateAdded', now.isoformat()))
+        days_in_stock = (now - date_added).days
+        
+        if days_in_stock >= Config.OLD_STOCK_DAYS and product.get('totalStock', 0) > 0:
+            alerts.append({
+                'type': 'old_stock',
+                'product': product.get('name'),
+                'daysInStock': days_in_stock,
+                'stock': product.get('totalStock', 0),
+                'message': f"{product.get('name')} has been in stock for {days_in_stock} days - consider promotions!"
+            })
+    
+    return jsonify(alerts)
+
+@app.route('/api/analytics/business-plan', methods=['GET'])
+@login_required
+def get_business_plan():
+    """Get business plan calculations"""
+    sales = data_store.get_sales()
+    products = data_store.get_products()
+    
+    total_revenue = sum(s.get('totalAmount', 0) for s in sales)
+    total_profit = sum(s.get('totalProfit', 0) for s in sales)
+    
+    # Calculate allocations
+    tithe = total_profit * (Config.TITHE_PERCENTAGE / 100)
+    savings = total_profit * (Config.SAVINGS_PERCENTAGE / 100)
+    restock = total_profit * (Config.RESTOCK_PERCENTAGE / 100)
+    deductions = total_profit * (Config.DEDUCTIONS_PERCENTAGE / 100)
+    personal_income = total_profit * (Config.PERSONAL_INCOME_PERCENTAGE / 100)
+    
+    # Calculate business health
+    stock_value = sum(
+        p.get('totalStock', 0) * p.get('buyPrice', 0) 
+        for p in products
+    )
+    
+    revenue_score = min(100, (total_revenue / 100000) * 100)
+    profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0
+    profit_score = min(100, profit_margin * 2)
+    inventory_score = min(100, (stock_value / 50000) * 100)
+    
+    health_score = int((revenue_score * 0.4) + (profit_score * 0.3) + (inventory_score * 0.3))
+    
+    if health_score < 30:
+        health_status = 'Needs Improvement'
+    elif health_score < 50:
+        health_status = 'Fair'
+    elif health_score < 70:
+        health_status = 'Good'
+    elif health_score < 85:
+        health_status = 'Very Good'
+    else:
+        health_status = 'Excellent'
+    
+    return jsonify({
+        'totalRevenue': total_revenue,
+        'totalProfit': total_profit,
+        'tithe': tithe,
+        'savings': savings,
+        'restock': restock,
+        'deductions': deductions,
+        'personalIncome': personal_income,
+        'healthScore': health_score,
+        'healthStatus': health_status,
+        'healthBreakdown': {
+            'revenue': revenue_score,
+            'profit': profit_score,
+            'inventory': inventory_score
+        }
+    })
+
+# ==================== NOTIFICATION ROUTES ====================
+
+def add_notification(message, type='info'):
+    """Add a notification"""
+    notification = {
+        'id': int(datetime.datetime.now().timestamp() * 1000),
+        'message': message,
+        'type': type,
+        'timestamp': datetime.datetime.now().isoformat(),
+        'read': False
+    }
+    
+    notifications = data_store.get_notifications()
+    notifications.insert(0, notification)
+    
+    # Keep only last 100 notifications
+    if len(notifications) > 100:
+        notifications = notifications[:100]
+    
+    data_store.save_notifications(notifications)
+    return notification
+
 @app.route('/api/notifications', methods=['GET'])
 @login_required
 def get_notifications():
-    return jsonify({
-        'notifications': db.get_notifications(),
-        'unread_count': db.get_unread_count()
-    })
+    """Get notifications"""
+    limit = int(request.args.get('limit', 50))
+    notifications = data_store.get_notifications()
+    
+    # Sort by timestamp (newest first)
+    notifications.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    
+    return jsonify(notifications[:limit])
 
-
-@app.route('/api/notifications/read', methods=['POST'])
+@app.route('/api/notifications/unread-count', methods=['GET'])
 @login_required
-def mark_read():
-    db.mark_notifications_read()
+def get_unread_count():
+    """Get unread notification count"""
+    notifications = data_store.get_notifications()
+    unread_count = sum(1 for n in notifications if not n.get('read', False))
+    return jsonify({'count': unread_count})
+
+@app.route('/api/notifications/mark-read', methods=['POST'])
+@login_required
+def mark_notifications_read():
+    """Mark all notifications as read"""
+    notifications = data_store.get_notifications()
+    for notification in notifications:
+        notification['read'] = True
+    
+    data_store.save_notifications(notifications)
     return jsonify({'success': True})
 
-
-# ==================== ALERTS ====================
-@app.route('/api/alerts/stock', methods=['GET'])
+@app.route('/api/notifications/<int:notification_id>/read', methods=['POST'])
 @login_required
-def get_alerts():
-    return jsonify(db.get_stock_alerts())
-
-
-# ==================== BUSINESS ====================
-@app.route('/api/business/plan', methods=['GET'])
-@login_required
-def get_plan():
-    return jsonify(db.get_business_plan())
-
-
-@app.route('/api/business/health', methods=['GET'])
-@login_required
-def get_health():
-    return jsonify(db.get_business_health())
-
-
-# ==================== CHARTS ====================
-@app.route('/api/charts/sales', methods=['GET'])
-@login_required
-def sales_chart():
-    days = int(request.args.get('days', 7))
-    sales = db.get_sales_by_period(days)
+def mark_notification_read(notification_id):
+    """Mark a specific notification as read"""
+    notifications = data_store.get_notifications()
     
-    labels = []
-    data = []
-    today = datetime.now()
+    for notification in notifications:
+        if notification['id'] == notification_id:
+            notification['read'] = True
+            data_store.save_notifications(notifications)
+            return jsonify({'success': True})
     
-    for i in range(days - 1, -1, -1):
-        date = today - timedelta(days=i)
-        labels.append(date.strftime('%b %d'))
-        
-        daily = 0
-        for sale in sales:
-            try:
-                if datetime.fromisoformat(sale['timestamp']).date() == date.date():
-                    daily += sale.get('total_amount', 0)
-            except:
-                pass
-        data.append(daily)
-    
-    return jsonify({
-        'labels': labels,
-        'datasets': [{
-            'label': 'Sales (KES)',
-            'data': data,
-            'borderColor': '#2196f3'
-        }]
-    })
+    return jsonify({'error': 'Notification not found'}), 404
 
+# ==================== UTILITY FUNCTIONS ====================
 
-@app.route('/api/charts/top-products', methods=['GET'])
-@login_required
-def top_products():
-    days = int(request.args.get('days', 7))
-    sales = db.get_sales_by_period(days)
+def record_monthly_category_sale(category, amount, quantity, profit):
+    """Record monthly category sales"""
+    now = datetime.datetime.now()
+    month_key = now.strftime('%Y-%m')
     
-    product_sales = {}
-    for sale in sales:
-        name = sale.get('product_name', 'Unknown')
-        product_sales[name] = product_sales.get(name, 0) + sale.get('quantity', 0)
+    category_sales = data_store.get_category_sales()
     
-    sorted_products = sorted(product_sales.items(), key=lambda x: x[1], reverse=True)[:5]
+    if month_key not in category_sales:
+        category_sales[month_key] = {}
     
-    return jsonify({
-        'labels': [p[0] for p in sorted_products],
-        'datasets': [{
-            'label': 'Units Sold',
-            'data': [p[1] for p in sorted_products],
-            'backgroundColor': '#ff5722'
-        }]
-    })
-
-
-# ==================== INIT SAMPLE DATA ====================
-@app.route('/api/init/sample-data', methods=['POST'])
-@login_required
-def init_sample():
-    if len(db.get_products()) > 0:
-        return jsonify({'message': 'Products exist'}), 400
-    
-    sample = [
-        {
-            'name': 'Nike Air Max',
-            'sku': 'KS-001',
-            'category': 'Sports Shoes',
-            'color': 'Black/White',
-            'sizes': {'42': 10, '43': 8, '44': 5},
-            'buy_price': 3500,
-            'min_sell_price': 4500,
-            'max_sell_price': 5500,
-            'image': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300'
-        },
-        {
-            'name': 'Adidas Stan Smith',
-            'sku': 'KS-002',
-            'category': 'Casual Shoes',
-            'color': 'White',
-            'sizes': {'41': 7, '42': 12, '43': 9},
-            'buy_price': 2800,
-            'min_sell_price': 3800,
-            'max_sell_price': 4800,
-            'image': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300'
+    if category not in category_sales[month_key]:
+        category_sales[month_key][category] = {
+            'revenue': 0,
+            'quantity': 0,
+            'profit': 0
         }
-    ]
     
-    for p in sample:
-        db.add_product(p)
+    category_sales[month_key][category]['revenue'] += amount
+    category_sales[month_key][category]['quantity'] += quantity
+    category_sales[month_key][category]['profit'] += profit
     
-    for p in db.get_products()[:2]:
-        sizes = list(p.get('sizes', {}).keys())
-        if sizes:
-            db.add_sale({
-                'product_id': p['id'],
-                'product_name': p['name'],
-                'product_sku': p['sku'],
-                'size': sizes[0],
-                'quantity': 2,
-                'unit_price': p['max_sell_price'],
-                'unit_cost': p['buy_price']
-            })
-    
-    db.add_notification('Sample data created!', 'success')
-    return jsonify({'success': True})
+    data_store.save_category_sales(category_sales)
 
+@app.route('/api/utils/export/csv', methods=['POST'])
+@login_required
+def export_to_csv():
+    """Export data to CSV"""
+    try:
+        data = request.json
+        export_type = data.get('type', 'sales')
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        if export_type == 'sales':
+            # Export sales
+            writer.writerow([
+                'Sale ID', 'Product', 'SKU', 'Size', 'Quantity', 
+                'Unit Price', 'Total Amount', 'Profit', 'Date', 'Customer'
+            ])
+            
+            sales = data_store.get_sales()
+            for sale in sales[:1000]:  # Limit to 1000 rows
+                writer.writerow([
+                    sale.get('id', ''),
+                    sale.get('productName', ''),
+                    sale.get('productSKU', ''),
+                    sale.get('size', ''),
+                    sale.get('quantity', 0),
+                    sale.get('unitPrice', 0),
+                    sale.get('totalAmount', 0),
+                    sale.get('totalProfit', 0),
+                    sale.get('timestamp', ''),
+                    sale.get('customerName', 'Walk-in Customer')
+                ])
+        
+        elif export_type == 'products':
+            # Export products
+            writer.writerow([
+                'Product ID', 'Name', 'SKU', 'Category', 'Color',
+                'Buy Price', 'Min Sell Price', 'Max Sell Price',
+                'Total Stock', 'Date Added'
+            ])
+            
+            products = data_store.get_products()
+            for product in products:
+                writer.writerow([
+                    product.get('id', ''),
+                    product.get('name', ''),
+                    product.get('sku', ''),
+                    product.get('category', ''),
+                    product.get('color', ''),
+                    product.get('buyPrice', 0),
+                    product.get('minSellPrice', 0),
+                    product.get('maxSellPrice', 0),
+                    product.get('totalStock', 0),
+                    product.get('dateAdded', '')
+                ])
+        
+        csv_data = output.getvalue()
+        output.close()
+        
+        return jsonify({
+            'success': True,
+            'csv': csv_data,
+            'filename': f"{export_type}_export_{now.strftime('%Y%m%d_%H%M%S')}.csv"
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ==================== ERROR HANDLERS ====================
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({'error': 'Not found'}), 404
 
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors"""
+    return render_template('index.html'), 404
 
 @app.errorhandler(500)
-def server_error(e):
-    return jsonify({'error': 'Server error'}), 500
+def internal_error(error):
+    """Handle 500 errors"""
+    return jsonify({'error': 'Internal server error'}), 500
 
+# ==================== HEALTH CHECK ====================
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Render"""
+    b2_status = 'connected' if b2_client.is_initialized() else 'demo_mode'
+    
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.datetime.now().isoformat(),
+        'app': 'Karanja Shoe Store Management System',
+        'version': '1.0.0',
+        'created': 'February 9, 2026',
+        'b2_status': b2_status,
+        'b2_bucket': Config.B2_BUCKET_NAME,
+        'b2_endpoint': Config.B2_ENDPOINT
+    })
 
 # ==================== MAIN ====================
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    
-    print("\n" + "="*50)
-    print("🚀 KARANJA SHOE STORE")
-    print("="*50)
-    print(f"📁 Data directory: {Config.DATA_DIR}")
-    print(f"📁 Template path: {os.path.join(app.root_path, 'templates', 'index.html')}")
-    print(f"📁 Template exists: {os.path.exists(os.path.join(app.root_path, 'templates', 'index.html'))}")
-    print(f"📊 Products: {len(db.products)}")
-    print(f"📊 Sales: {len(db.sales)}")
-    print(f"🌐 Port: {port}")
-    print("="*50 + "\n")
-    
     app.run(host='0.0.0.0', port=port, debug=Config.DEBUG)
