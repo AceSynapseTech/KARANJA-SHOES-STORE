@@ -29,15 +29,14 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'karanja-shoe-store-secr
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'karanja-jwt-secret-key-2026')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20MB
-app.config['UPLOAD_FOLDER'] = '/tmp'
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['STATIC_FOLDER'] = 'static'
-app.config['STATIC_URL'] = '/static'
 
 # Create static folders
-os.makedirs(os.path.join('static', 'uploads'), exist_ok=True)
-os.makedirs(os.path.join('static', 'products'), exist_ok=True)
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs('static', exist_ok=True)
 
-# ==================== BACKBLAZE B2 CONFIGURATION - JANUARY 22, 2026 ====================
+# ==================== BACKBLAZE B2 CONFIGURATION ====================
 B2_CONFIG = {
     # BUCKET INFORMATION
     'BUCKET_NAME': 'karanja-shoe-store',
@@ -150,7 +149,6 @@ class B2DataStore:
             return json.loads(content) if content.strip() else {}
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
-                # File doesn't exist yet - return empty dict
                 return {}
             logger.error(f"Error reading {b2_key} from B2: {e}")
             return {}
@@ -331,13 +329,9 @@ if not b2_store.users:
 
 # ==================== BACKBLAZE B2 HELPER FUNCTIONS ====================
 def generate_signed_url(s3_key, expiration=604800):
-    """
-    Generate a pre-signed URL for private B2 bucket access
-    Default expiration: 7 days (604800 seconds)
-    """
+    """Generate a pre-signed URL for private B2 bucket access"""
     try:
         if not s3_key:
-            logger.warning("No s3_key provided for signed URL generation")
             return None
         
         url = b2_client.generate_presigned_url(
@@ -348,45 +342,34 @@ def generate_signed_url(s3_key, expiration=604800):
             },
             ExpiresIn=expiration
         )
-        logger.info(f"Generated signed URL for {s3_key} (expires in {expiration}s)")
         return url
-    except ClientError as e:
-        logger.error(f"B2 ClientError generating signed URL: {e}")
-        return None
     except Exception as e:
         logger.error(f"Error generating signed URL: {e}")
         return None
 
 def extract_s3_key_from_url(url):
-    """Extract S3 key from B2 URL (CDN or signed URL)"""
+    """Extract S3 key from B2 URL"""
     if not url:
         return None
-    
     try:
-        # Handle CDN URL format
         if B2_CONFIG['CDN_URL'] in url:
             return url.replace(f"{B2_CONFIG['CDN_URL']}/", '')
-        
-        # Handle signed URL format - extract path before query string
-        if 's3.eu-central-003' in url or 'backblazeb2.com' in url:
+        if 'backblazeb2.com' in url:
             import re
             match = re.search(r'products/[^?]+', url)
             if match:
                 return match.group(0)
-        
-        # Handle direct key
         if url.startswith('products/'):
             return url
     except Exception as e:
-        logger.error(f"Error extracting S3 key from URL: {e}")
-    
+        logger.error(f"Error extracting S3 key: {e}")
     return None
 
-# ==================== BACKBLAZE B2 ROUTES ====================
+# ==================== BACKBLAZE B2 UPLOAD ROUTE ====================
 @app.route('/api/b2/upload', methods=['POST'])
 @jwt_required()
 def upload_to_b2():
-    """Upload image to Backblaze B2 Private Bucket with signed URL"""
+    """Upload image to Backblaze B2 Private Bucket"""
     try:
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
@@ -407,8 +390,6 @@ def upload_to_b2():
         if not content_type:
             content_type = mimetypes.guess_type(file.filename)[0] or 'image/jpeg'
         
-        logger.info(f"Uploading {s3_key} to B2 bucket {B2_CONFIG['BUCKET_NAME']}")
-        
         # Upload to B2
         file.seek(0)
         b2_client.upload_fileobj(
@@ -426,70 +407,40 @@ def upload_to_b2():
             }
         )
         
-        # Generate signed URL (7 days expiration)
+        # Generate signed URL
         signed_url = generate_signed_url(s3_key, expiration=604800)
-        
-        # CDN URL (for reference only - won't work with private bucket)
-        cdn_url = f"{B2_CONFIG['CDN_URL']}/{s3_key}"
         
         # Store record in B2
         image_record = {
             'id': str(uuid.uuid4()),
-            'cdn_url': cdn_url,
             'signed_url': signed_url,
             's3_key': s3_key,
             'fileName': unique_filename,
             'bucketId': B2_CONFIG['BUCKET_ID'],
             'bucketName': B2_CONFIG['BUCKET_NAME'],
-            'endpoint': B2_CONFIG['ENDPOINT'],
-            'size': request.content_length or 0,
-            'type': content_type,
-            'uploadedAt': datetime.now().isoformat(),
-            'expiresAt': (datetime.now() + timedelta(days=7)).isoformat(),
-            'uploadedBy': get_jwt_identity()
+            'uploadedAt': datetime.now().isoformat()
         }
         
         b2_store.b2_images.append(image_record)
         b2_store.save_b2_images()
         
-        logger.info(f"Successfully uploaded {s3_key} to B2")
-        
         return jsonify({
             'success': True,
-            'url': signed_url,  # This WILL work (private bucket signed URL)
+            'url': signed_url,
             'signed_url': signed_url,
-            'cdn_url': cdn_url,
             'fileName': unique_filename,
-            's3_key': s3_key,
-            'bucketId': B2_CONFIG['BUCKET_ID'],
-            'bucketName': B2_CONFIG['BUCKET_NAME'],
-            'endpoint': B2_CONFIG['ENDPOINT'],
-            'expires_in': '7 days',
-            'expires_at': (datetime.now() + timedelta(days=7)).isoformat(),
-            'current_files': B2_CONFIG['CURRENT_FILES'],
-            'current_size': B2_CONFIG['CURRENT_SIZE'],
-            'bucket_type': B2_CONFIG['TYPE'],
-            'created': B2_CONFIG['CREATED_DATE']
+            's3_key': s3_key
         }), 200
         
-    except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
-        logger.error(f"B2 upload failed: {error_code} - {error_message}")
-        return jsonify({
-            'error': f'B2 upload failed: {error_code} - {error_message}',
-            'details': str(e)
-        }), 500
     except Exception as e:
-        logger.error(f"Unexpected error in upload: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"Error uploading to B2: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ==================== LOCAL FILE UPLOAD ROUTE (FALLBACK) ====================
 @app.route('/api/upload/local', methods=['POST'])
 @jwt_required()
 def upload_local():
-    """Upload image locally (fallback if B2 fails)"""
+    """Upload image locally (fallback)"""
     try:
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
@@ -511,8 +462,6 @@ def upload_local():
         # Generate URL
         file_url = f"/static/uploads/{filename}"
         
-        logger.info(f"Successfully uploaded locally: {filename}")
-        
         return jsonify({
             'success': True,
             'url': file_url,
@@ -530,25 +479,7 @@ def upload_local():
 def get_products():
     """Get all products with fresh signed URLs"""
     try:
-        search = request.args.get('search', '').lower()
-        category = request.args.get('category')
-        in_stock = request.args.get('in_stock', '').lower() == 'true'
-        
         products = b2_store.products
-        
-        # Apply filters
-        if search:
-            products = [p for p in products if 
-                       search in p.get('name', '').lower() or
-                       search in p.get('sku', '').lower() or
-                       search in p.get('category', '').lower() or
-                       search in p.get('color', '').lower()]
-        
-        if category:
-            products = [p for p in products if p.get('category') == category]
-        
-        if in_stock:
-            products = [p for p in products if p.get('totalStock', 0) > 0]
         
         # Sort by date added (newest first)
         products.sort(key=lambda x: x.get('dateAdded', ''), reverse=True)
@@ -563,7 +494,6 @@ def get_products():
                 fresh_url = generate_signed_url(product['s3_key'], expiration=86400)
                 if fresh_url:
                     product_copy['image'] = fresh_url
-                    product_copy['image_expires'] = (datetime.now() + timedelta(days=1)).isoformat()
             
             # Handle local images
             elif product.get('local_image'):
@@ -577,152 +507,6 @@ def get_products():
         logger.error(f"Error getting products: {e}")
         return jsonify([]), 200
 
-@app.route('/api/products', methods=['POST'])
-@jwt_required()
-def create_product():
-    """Create new product - SUPPORTS BOTH JSON AND FORM DATA"""
-    try:
-        # Check if this is form-data (from HTML form) or JSON (from API)
-        if request.content_type and 'multipart/form-data' in request.content_type:
-            # Handle form data from HTML upload
-            name = request.form.get('name')
-            price = request.form.get('price')
-            description = request.form.get('description', '')
-            image_url = request.form.get('image_url')
-            sizes_json = request.form.get('sizes', '{}')
-            
-            # Parse sizes
-            try:
-                sizes = json.loads(sizes_json)
-            except:
-                sizes = {}
-            
-            # Get category, color etc
-            category = request.form.get('category', 'Uncategorized')
-            color = request.form.get('color', '')
-            sku = request.form.get('sku', f"KS-{str(uuid.uuid4())[:8].upper()}")
-            
-            # Calculate total stock
-            total_stock = 0
-            for size, stock in sizes.items():
-                try:
-                    total_stock += int(stock) if stock and int(stock) > 0 else 0
-                except:
-                    pass
-            
-        else:
-            # Handle JSON data from API
-            data = request.get_json()
-            name = data.get('name')
-            price = data.get('price')
-            description = data.get('description', '')
-            image_url = data.get('image')
-            sizes = data.get('sizes', {})
-            category = data.get('category', 'Uncategorized')
-            color = data.get('color', '')
-            sku = data.get('sku', f"KS-{str(uuid.uuid4())[:8].upper()}")
-            
-            # Calculate total stock
-            total_stock = 0
-            for size, stock in sizes.items():
-                try:
-                    total_stock += int(stock) if stock and int(stock) > 0 else 0
-                except:
-                    pass
-        
-        # Validate required fields
-        if not name:
-            return jsonify({'error': 'Product name is required'}), 400
-        
-        if not price:
-            return jsonify({'error': 'Price is required'}), 400
-        
-        # Extract S3 key from image URL if it's from B2
-        s3_key = None
-        if image_url and 'backblazeb2.com' in image_url:
-            s3_key = extract_s3_key_from_url(image_url)
-        
-        # Generate signed URL if we have s3_key
-        signed_url = None
-        if s3_key:
-            signed_url = generate_signed_url(s3_key, expiration=604800)  # 7 days
-        
-        # Create product object
-        product = {
-            'id': int(datetime.now().timestamp() * 1000),
-            'name': name.strip(),
-            'price': float(price),
-            'description': description.strip(),
-            'sku': sku,
-            'category': category,
-            'color': color,
-            'sizes': sizes,
-            'totalStock': total_stock,
-            'dateAdded': datetime.now().isoformat(),
-            'lastUpdated': datetime.now().isoformat(),
-            'createdBy': get_jwt_identity()
-        }
-        
-        # Handle image - prioritize B2, fallback to local
-        if signed_url:
-            product['image'] = signed_url
-            product['s3_key'] = s3_key
-            product['cdn_url'] = f"{B2_CONFIG['CDN_URL']}/{s3_key}" if s3_key else None
-            product['image_source'] = 'b2'
-        elif image_url and not image_url.startswith('http'):
-            # Local image path
-            product['image'] = image_url
-            product['local_image'] = image_url
-            product['image_source'] = 'local'
-        elif image_url and image_url.startswith('http'):
-            # External URL
-            product['image'] = image_url
-            product['image_source'] = 'external'
-        else:
-            # Default placeholder
-            product['image'] = '/static/placeholder.png'
-            product['image_source'] = 'placeholder'
-        
-        # Add to store
-        b2_store.products.append(product)
-        b2_store.save_products()
-        
-        # Add notification
-        notification = {
-            'id': int(datetime.now().timestamp() * 1000),
-            'message': f'New product added: {product["name"]}',
-            'type': 'success',
-            'timestamp': datetime.now().isoformat(),
-            'read': False
-        }
-        b2_store.notifications.insert(0, notification)
-        b2_store.save_notifications()
-        
-        logger.info(f"Product created: {product['name']} (ID: {product['id']})")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Product uploaded successfully!',
-            'product': product
-        }), 201
-        
-    except Exception as e:
-        logger.error(f"Error creating product: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-# ==================== STATIC FILE SERVING ====================
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    """Serve static files"""
-    return send_from_directory('static', filename)
-
-@app.route('/static/uploads/<path:filename>')
-def serve_upload(filename):
-    """Serve uploaded files"""
-    return send_from_directory('static/uploads', filename)
-
-# ==================== PUBLIC PRODUCT ROUTES (NO AUTH) ====================
 @app.route('/api/public/products', methods=['GET'])
 def get_public_products():
     """Public endpoint to get products - NO LOGIN REQUIRED"""
@@ -761,108 +545,254 @@ def get_public_products():
         logger.error(f"Error getting public products: {e}")
         return jsonify([]), 200
 
-# ==================== HTML PAGE ROUTES ====================
-@app.route('/')
-def index():
-    """Serve the main index.html page"""
+@app.route('/api/products', methods=['POST'])
+@jwt_required()
+def create_product():
+    """Create new product - SUPPORTS FORM DATA (with image)"""
     try:
-        # Try to serve index.html from current directory
-        if os.path.exists('index.html'):
-            with open('index.html', 'r') as f:
-                content = f.read()
-                return render_template_string(content)
+        # Get form data
+        name = request.form.get('name')
+        price = request.form.get('price')
+        description = request.form.get('description', '')
+        category = request.form.get('category', 'Uncategorized')
+        color = request.form.get('color', '')
+        sku = request.form.get('sku', f"KS-{str(uuid.uuid4())[:8].upper()}")
+        
+        # Get sizes JSON
+        sizes_json = request.form.get('sizes', '{}')
+        try:
+            sizes = json.loads(sizes_json)
+        except:
+            sizes = {}
+        
+        # Get buy price and sell price range
+        buy_price = request.form.get('buyPrice')
+        min_sell_price = request.form.get('minSellPrice')
+        max_sell_price = request.form.get('maxSellPrice')
+        
+        # Image URL from upload
+        image_url = request.form.get('image_url')
+        
+        # Validate required fields
+        if not name:
+            return jsonify({'error': 'Product name is required'}), 400
+        
+        if not price and not max_sell_price:
+            return jsonify({'error': 'Price is required'}), 400
+        
+        # Use price as max_sell_price if not provided
+        if not max_sell_price and price:
+            max_sell_price = price
+        if not min_sell_price and price:
+            min_sell_price = price
+        
+        # Calculate total stock
+        total_stock = 0
+        for size, stock in sizes.items():
+            try:
+                total_stock += int(stock) if stock and int(stock) > 0 else 0
+            except:
+                pass
+        
+        # Extract S3 key from image URL if it's from B2
+        s3_key = None
+        if image_url and 'backblazeb2.com' in image_url:
+            s3_key = extract_s3_key_from_url(image_url)
+        
+        # Generate signed URL if we have s3_key
+        signed_url = None
+        if s3_key:
+            signed_url = generate_signed_url(s3_key, expiration=604800)
+        
+        # Create product object
+        product = {
+            'id': int(datetime.now().timestamp() * 1000),
+            'name': name.strip(),
+            'price': float(max_sell_price) if max_sell_price else 0,
+            'description': description.strip(),
+            'sku': sku,
+            'category': category,
+            'color': color,
+            'sizes': sizes,
+            'buyPrice': float(buy_price) if buy_price else 0,
+            'minSellPrice': float(min_sell_price) if min_sell_price else 0,
+            'maxSellPrice': float(max_sell_price) if max_sell_price else 0,
+            'totalStock': total_stock,
+            'dateAdded': datetime.now().isoformat(),
+            'lastUpdated': datetime.now().isoformat(),
+            'createdBy': get_jwt_identity()
+        }
+        
+        # Handle image
+        if signed_url:
+            product['image'] = signed_url
+            product['s3_key'] = s3_key
+            product['image_source'] = 'b2'
+        elif image_url and image_url.startswith('/static/'):
+            product['image'] = image_url
+            product['local_image'] = image_url
+            product['image_source'] = 'local'
+        elif image_url and image_url.startswith('http'):
+            product['image'] = image_url
+            product['image_source'] = 'external'
         else:
-            # Create a simple HTML page if index.html doesn't exist
-            return render_template_string('''
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Karanja Shoe Store</title>
-                <style>
-                    body {
-                        font-family: Arial, sans-serif;
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        min-height: 100vh;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        margin: 0;
-                        padding: 20px;
-                    }
-                    .container {
-                        background: white;
-                        padding: 40px;
-                        border-radius: 10px;
-                        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-                        max-width: 800px;
-                        text-align: center;
-                    }
-                    h1 { color: #333; }
-                    p { color: #666; line-height: 1.6; }
-                    .badge {
-                        background: #667eea;
-                        color: white;
-                        padding: 5px 10px;
-                        border-radius: 5px;
-                        display: inline-block;
-                        margin: 10px 0;
-                    }
-                    .success { color: #28a745; }
-                    .info { background: #e3f2fd; padding: 15px; border-radius: 5px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>👟 Karanja Shoe Store</h1>
-                    <div class="badge">Backblaze B2 Cloud Storage</div>
-                    <div class="badge" style="background: #764ba2;">Bucket: {{ bucket_name }}</div>
-                    <p class="success">✓ Backend is running successfully!</p>
-                    <div class="info">
-                        <h3>📊 System Status</h3>
-                        <p>📦 Products: {{ products_count }}</p>
-                        <p>🖼️ B2 Images: {{ images_count }}</p>
-                        <p>📁 Bucket Created: {{ bucket_created }}</p>
-                        <p>💾 Data Storage: 100% Backblaze B2</p>
-                    </div>
-                    <p>Please ensure <strong>index.html</strong> is in the same directory as app.py</p>
-                </div>
-            </body>
-            </html>
-            ''', 
-            bucket_name=B2_CONFIG['BUCKET_NAME'],
-            products_count=len(b2_store.products),
-            images_count=len(b2_store.b2_images),
-            bucket_created=B2_CONFIG['CREATED_DATE'])
-    except Exception as e:
-        logger.error(f"Error serving index: {e}")
+            # Default placeholder
+            product['image'] = '/static/placeholder.png'
+            product['image_source'] = 'placeholder'
+        
+        # Add to store
+        b2_store.products.append(product)
+        b2_store.save_products()
+        
+        # Add notification
+        notification = {
+            'id': int(datetime.now().timestamp() * 1000),
+            'message': f'New product added: {product["name"]}',
+            'type': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'read': False
+        }
+        b2_store.notifications.insert(0, notification)
+        b2_store.save_notifications()
+        
         return jsonify({
-            'status': 'running',
-            'message': 'Karanja Shoe Store API is running',
-            'b2_bucket': B2_CONFIG['BUCKET_NAME'],
-            'b2_created': B2_CONFIG['CREATED_DATE'],
-            'products': len(b2_store.products),
-            'images': len(b2_store.b2_images),
-            'endpoints': {
-                'public_products': '/api/public/products',
-                'upload': '/api/b2/upload',
-                'login': '/api/auth/login'
-            }
+            'success': True,
+            'message': 'Product uploaded successfully!',
+            'product': product
+        }), 201
+        
+    except Exception as e:
+        logger.error(f"Error creating product: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/products/<int:product_id>', methods=['PUT'])
+@jwt_required()
+def update_product(product_id):
+    """Update existing product"""
+    try:
+        product = next((p for p in b2_store.products if p['id'] == product_id), None)
+        
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+        
+        # Get form data
+        name = request.form.get('name')
+        description = request.form.get('description')
+        category = request.form.get('category')
+        color = request.form.get('color')
+        sku = request.form.get('sku')
+        buy_price = request.form.get('buyPrice')
+        min_sell_price = request.form.get('minSellPrice')
+        max_sell_price = request.form.get('maxSellPrice')
+        image_url = request.form.get('image_url')
+        sizes_json = request.form.get('sizes')
+        
+        # Update fields if provided
+        if name:
+            product['name'] = name.strip()
+        if description is not None:
+            product['description'] = description.strip()
+        if category:
+            product['category'] = category
+        if color is not None:
+            product['color'] = color
+        if sku:
+            product['sku'] = sku
+        if buy_price:
+            product['buyPrice'] = float(buy_price)
+        if min_sell_price:
+            product['minSellPrice'] = float(min_sell_price)
+        if max_sell_price:
+            product['maxSellPrice'] = float(max_sell_price)
+            product['price'] = float(max_sell_price)
+        
+        # Update sizes
+        if sizes_json:
+            try:
+                sizes = json.loads(sizes_json)
+                product['sizes'] = sizes
+                
+                # Recalculate total stock
+                total_stock = 0
+                for size, stock in sizes.items():
+                    try:
+                        total_stock += int(stock) if stock and int(stock) > 0 else 0
+                    except:
+                        pass
+                product['totalStock'] = total_stock
+            except:
+                pass
+        
+        # Update image
+        if image_url:
+            s3_key = extract_s3_key_from_url(image_url)
+            if s3_key:
+                product['s3_key'] = s3_key
+                product['image'] = generate_signed_url(s3_key, expiration=604800)
+                product['image_source'] = 'b2'
+            elif image_url.startswith('/static/'):
+                product['local_image'] = image_url
+                product['image'] = image_url
+                product['image_source'] = 'local'
+            else:
+                product['image'] = image_url
+                product['image_source'] = 'external'
+        
+        product['lastUpdated'] = datetime.now().isoformat()
+        
+        b2_store.save_products()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Product updated successfully!',
+            'product': product
         }), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating product: {e}")
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/products')
-def products_page():
-    """Serve products page"""
-    return index()
+@app.route('/api/products/<int:product_id>', methods=['DELETE'])
+@jwt_required()
+def delete_product(product_id):
+    """Delete product"""
+    try:
+        product = next((p for p in b2_store.products if p['id'] == product_id), None)
+        
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+        
+        b2_store.products = [p for p in b2_store.products if p['id'] != product_id]
+        b2_store.save_products()
+        
+        # Add notification
+        notification = {
+            'id': int(datetime.now().timestamp() * 1000),
+            'message': f'Product deleted: {product["name"]}',
+            'type': 'warning',
+            'timestamp': datetime.now().isoformat(),
+            'read': False
+        }
+        b2_store.notifications.insert(0, notification)
+        b2_store.save_notifications()
+        
+        return jsonify({'success': True, 'message': 'Product deleted successfully'}), 200
+        
+    except Exception as e:
+        logger.error(f"Error deleting product: {e}")
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/upload')
-def upload_page():
-    """Serve upload page"""
-    return index()
+# ==================== STATIC FILE SERVING ====================
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    """Serve static files"""
+    return send_from_directory('static', filename)
 
-@app.route('/admin')
-def admin_page():
-    """Serve admin page"""
-    return index()
+@app.route('/static/uploads/<path:filename>')
+def serve_upload(filename):
+    """Serve uploaded files"""
+    return send_from_directory('static/uploads', filename)
 
 # ==================== AUTHENTICATION ROUTES ====================
 @app.route('/api/auth/login', methods=['POST'])
@@ -888,8 +818,6 @@ def login():
                 }
             )
             
-            logger.info(f"User logged in: {email}")
-            
             return jsonify({
                 'success': True,
                 'token': access_token,
@@ -901,7 +829,6 @@ def login():
                 }
             }), 200
         
-        logger.warning(f"Failed login attempt for: {email}")
         return jsonify({'error': 'Invalid credentials'}), 401
         
     except Exception as e:
@@ -930,73 +857,17 @@ def get_current_user():
         logger.error(f"Error getting current user: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== B2 INFO ROUTES ====================
-@app.route('/api/b2/info', methods=['GET'])
-@jwt_required()
-def get_b2_info():
-    """Get Backblaze B2 bucket information"""
-    try:
-        return jsonify({
-            'bucketId': B2_CONFIG['BUCKET_ID'],
-            'bucketName': B2_CONFIG['BUCKET_NAME'],
-            'endpoint': B2_CONFIG['ENDPOINT'],
-            'region': B2_CONFIG['REGION'],
-            'created': B2_CONFIG['CREATED_DATE'],
-            'cdn_url': B2_CONFIG['CDN_URL'],
-            'type': B2_CONFIG['TYPE'],
-            'current_files': B2_CONFIG['CURRENT_FILES'],
-            'current_size': B2_CONFIG['CURRENT_SIZE'],
-            'stored_images': len(b2_store.b2_images),
-            'connected': True,
-            'data_files': list(B2_CONFIG['DATA_PATHS'].values())
-        }), 200
-    except Exception as e:
-        logger.error(f"Error getting B2 info: {e}")
-        return jsonify({
-            'bucketId': B2_CONFIG['BUCKET_ID'],
-            'bucketName': B2_CONFIG['BUCKET_NAME'],
-            'endpoint': B2_CONFIG['ENDPOINT'],
-            'created': B2_CONFIG['CREATED_DATE'],
-            'type': B2_CONFIG['TYPE'],
-            'connected': False,
-            'error': str(e)
-        }), 200
-
-@app.route('/api/b2/images', methods=['GET'])
-@jwt_required()
-def get_b2_images():
-    """Get all B2 images with fresh signed URLs"""
-    try:
-        images = []
-        for img in b2_store.b2_images[-50:]:  # Last 50 images
-            img_copy = img.copy()
-            # Generate fresh signed URL
-            fresh_url = generate_signed_url(img['s3_key'], expiration=86400)
-            if fresh_url:
-                img_copy['signed_url'] = fresh_url
-                img_copy['url'] = fresh_url
-            images.append(img_copy)
-        
-        return jsonify(images), 200
-    except Exception as e:
-        logger.error(f"Error getting B2 images: {e}")
-        return jsonify([]), 200
-
-# ==================== DASHBOARD STATS ROUTES ====================
+# ==================== DASHBOARD STATS ====================
 @app.route('/api/dashboard/stats', methods=['GET'])
 @jwt_required()
 def get_dashboard_stats():
     """Get dashboard statistics"""
     try:
-        # Get all products and sales
         products = b2_store.products
         sales = b2_store.sales
         
-        # Calculate stats
         total_products = len(products)
         total_stock = sum([p.get('totalStock', 0) for p in products])
-        
-        # Calculate total sales
         total_revenue = sum([s.get('totalAmount', 0) for s in sales])
         total_profit = sum([s.get('totalProfit', 0) for s in sales])
         
@@ -1031,20 +902,114 @@ def get_dashboard_stats():
             'salesCount': 0
         }), 200
 
+# ==================== SALES ROUTES ====================
+@app.route('/api/sales', methods=['POST'])
+@jwt_required()
+def create_sale():
+    """Record new sale"""
+    try:
+        data = request.get_json()
+        
+        product_id = data.get('productId')
+        size = data.get('size')
+        quantity = data.get('quantity')
+        unit_price = data.get('unitPrice')
+        customer_name = data.get('customerName', 'Walk-in Customer')
+        notes = data.get('notes', '')
+        is_bargain = data.get('isBargain', False)
+        
+        if not all([product_id, size, quantity, unit_price]):
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        product = next((p for p in b2_store.products if p['id'] == product_id), None)
+        
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+        
+        # Check stock
+        size_key = str(size)
+        if size_key not in product['sizes'] or product['sizes'][size_key] < quantity:
+            return jsonify({'error': 'Insufficient stock'}), 400
+        
+        # Update stock
+        product['sizes'][size_key] -= quantity
+        if product['sizes'][size_key] < 0:
+            product['sizes'][size_key] = 0
+        
+        # Recalculate total stock
+        total_stock = 0
+        for stock in product['sizes'].values():
+            total_stock += stock if stock > 0 else 0
+        product['totalStock'] = total_stock
+        product['lastUpdated'] = datetime.now().isoformat()
+        
+        b2_store.save_products()
+        
+        # Calculate amounts
+        total_amount = unit_price * quantity
+        total_cost = product['buyPrice'] * quantity
+        total_profit = total_amount - total_cost
+        
+        # Create sale record
+        sale = {
+            'id': int(datetime.now().timestamp() * 1000),
+            'productId': product_id,
+            'productName': product['name'],
+            'productSKU': product.get('sku', ''),
+            'size': size,
+            'quantity': quantity,
+            'unitPrice': unit_price,
+            'totalAmount': total_amount,
+            'totalProfit': total_profit,
+            'customerName': customer_name,
+            'notes': notes,
+            'isBargain': is_bargain,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        b2_store.sales.append(sale)
+        b2_store.save_sales()
+        
+        # Add notification
+        notification = {
+            'id': int(datetime.now().timestamp() * 1000),
+            'message': f'Sale recorded: {product["name"]} ({quantity} × Size {size})',
+            'type': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'read': False
+        }
+        b2_store.notifications.insert(0, notification)
+        b2_store.save_notifications()
+        
+        return jsonify({
+            'success': True,
+            'sale': sale
+        }), 201
+        
+    except Exception as e:
+        logger.error(f"Error creating sale: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/sales', methods=['GET'])
+@jwt_required()
+def get_sales():
+    """Get all sales"""
+    try:
+        sales = b2_store.sales
+        sales.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        return jsonify(sales), 200
+    except Exception as e:
+        logger.error(f"Error getting sales: {e}")
+        return jsonify([]), 200
+
 # ==================== NOTIFICATION ROUTES ====================
 @app.route('/api/notifications', methods=['GET'])
 @jwt_required()
 def get_notifications():
     """Get all notifications"""
     try:
-        unread_only = request.args.get('unread', '').lower() == 'true'
-        
-        notifications = b2_store.notifications
-        
-        if unread_only:
-            notifications = [n for n in notifications if not n.get('read', False)]
-        
-        return jsonify(notifications[:50]), 200
+        notifications = b2_store.notifications[:50]
+        return jsonify(notifications), 200
     except Exception as e:
         logger.error(f"Error getting notifications: {e}")
         return jsonify([]), 200
@@ -1077,43 +1042,27 @@ def mark_notification_read(notification_id):
         logger.error(f"Error marking notification read: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/notifications/read-all', methods=['PUT'])
+# ==================== B2 INFO ROUTES ====================
+@app.route('/api/b2/info', methods=['GET'])
 @jwt_required()
-def mark_all_notifications_read():
-    """Mark all notifications as read"""
+def get_b2_info():
+    """Get Backblaze B2 bucket information"""
     try:
-        for notification in b2_store.notifications:
-            notification['read'] = True
-        
-        b2_store.save_notifications()
-        
-        return jsonify({'success': True}), 200
+        return jsonify({
+            'bucketId': B2_CONFIG['BUCKET_ID'],
+            'bucketName': B2_CONFIG['BUCKET_NAME'],
+            'endpoint': B2_CONFIG['ENDPOINT'],
+            'region': B2_CONFIG['REGION'],
+            'created': B2_CONFIG['CREATED_DATE'],
+            'cdn_url': B2_CONFIG['CDN_URL'],
+            'type': B2_CONFIG['TYPE'],
+            'current_files': B2_CONFIG['CURRENT_FILES'],
+            'current_size': B2_CONFIG['CURRENT_SIZE'],
+            'stored_images': len(b2_store.b2_images),
+            'connected': True
+        }), 200
     except Exception as e:
-        logger.error(f"Error marking all notifications read: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# ==================== SETTINGS ROUTES ====================
-@app.route('/api/settings', methods=['GET'])
-@jwt_required()
-def get_settings():
-    """Get application settings"""
-    try:
-        return jsonify(b2_store.settings), 200
-    except Exception as e:
-        logger.error(f"Error getting settings: {e}")
-        return jsonify({}), 200
-
-@app.route('/api/settings', methods=['PUT'])
-@jwt_required()
-def update_settings():
-    """Update application settings"""
-    try:
-        data = request.get_json()
-        b2_store.settings.update(data)
-        b2_store.save_settings()
-        return jsonify(b2_store.settings), 200
-    except Exception as e:
-        logger.error(f"Error updating settings: {e}")
+        logger.error(f"Error getting B2 info: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ==================== HEALTH CHECK ====================
@@ -1121,72 +1070,45 @@ def update_settings():
 def health_check():
     """Health check endpoint"""
     try:
-        # Test B2 connection
-        b2_status = 'connected'
-        try:
-            b2_client.list_buckets()
-        except:
-            b2_status = 'disconnected'
-        
         return jsonify({
             'status': 'healthy',
             'timestamp': datetime.now().isoformat(),
             'app': 'Karanja Shoe Store',
-            'created': 'February 9, 2026',
             'b2_bucket': B2_CONFIG['BUCKET_NAME'],
-            'b2_bucket_id': B2_CONFIG['BUCKET_ID'],
             'b2_created': B2_CONFIG['CREATED_DATE'],
-            'b2_type': B2_CONFIG['TYPE'],
-            'b2_files': B2_CONFIG['CURRENT_FILES'],
-            'b2_size': B2_CONFIG['CURRENT_SIZE'],
-            'b2_status': b2_status,
             'products': len(b2_store.products),
-            'images': len(b2_store.b2_images),
-            'data_storage': 'Backblaze B2 (100% cloud storage)',
-            'local_storage': 'Static files served locally'
+            'sales': len(b2_store.sales),
+            'images': len(b2_store.b2_images)
         }), 200
     except Exception as e:
-        logger.error(f"Health check error: {e}")
-        return jsonify({
-            'status': 'degraded',
-            'timestamp': datetime.now().isoformat(),
-            'app': 'Karanja Shoe Store',
-            'error': str(e)
-        }), 200
+        return jsonify({'status': 'degraded', 'error': str(e)}), 200
 
-# ==================== INITIALIZE SAMPLE DATA ====================
-def init_sample_data():
-    """Initialize sample data if no products exist"""
+# ==================== STATIC PAGE ROUTES ====================
+@app.route('/')
+def index():
+    """Serve index.html"""
     try:
-        if len(b2_store.products) == 0:
-            # Create placeholder image if it doesn't exist
-            placeholder_path = os.path.join('static', 'placeholder.png')
-            if not os.path.exists(placeholder_path):
-                os.makedirs('static', exist_ok=True)
-                # Create a simple colored placeholder
-                from PIL import Image
-                try:
-                    img = Image.new('RGB', (300, 300), color=(102, 126, 234))
-                    img.save(placeholder_path)
-                except:
-                    logger.warning("Could not create placeholder image (PIL not installed)")
-            
-            # Add welcome notification
-            notification = {
-                'id': int(datetime.now().timestamp() * 1000),
-                'message': f'Welcome to Karanja Shoe Store! ALL data stored in Backblaze B2 bucket: {B2_CONFIG["BUCKET_NAME"]} (Created: {B2_CONFIG["CREATED_DATE"]})',
-                'type': 'info',
-                'timestamp': datetime.now().isoformat(),
-                'read': False
-            }
-            b2_store.notifications.insert(0, notification)
-            b2_store.save_notifications()
-            logger.info("Sample data initialized in B2")
+        if os.path.exists('index.html'):
+            with open('index.html', 'r', encoding='utf-8') as f:
+                return render_template_string(f.read())
+        else:
+            return jsonify({
+                'message': 'Karanja Shoe Store API is running',
+                'b2_bucket': B2_CONFIG['BUCKET_NAME'],
+                'products': len(b2_store.products),
+                'status': 'online'
+            }), 200
     except Exception as e:
-        logger.error(f"Error initializing data: {e}")
+        logger.error(f"Error serving index: {e}")
+        return jsonify({'error': 'Could not load index.html'}), 500
 
-# Initialize sample data
-init_sample_data()
+# Catch-all route for SPA
+@app.route('/<path:path>')
+def catch_all(path):
+    """Serve index.html for all non-API routes"""
+    if path.startswith('api/'):
+        return jsonify({'error': 'API endpoint not found'}), 404
+    return index()
 
 # ==================== ERROR HANDLERS ====================
 @app.errorhandler(404)
@@ -1205,6 +1127,42 @@ def internal_server_error(e):
 @app.errorhandler(413)
 def request_entity_too_large(e):
     return jsonify({'error': 'File too large. Maximum size is 20MB'}), 413
+
+# ==================== INITIALIZE SAMPLE DATA ====================
+def init_sample_data():
+    """Initialize sample data if no products exist"""
+    try:
+        if len(b2_store.products) == 0:
+            # Create placeholder image
+            placeholder_path = os.path.join('static', 'placeholder.png')
+            if not os.path.exists(placeholder_path):
+                os.makedirs('static', exist_ok=True)
+                try:
+                    from PIL import Image, ImageDraw
+                    img = Image.new('RGB', (300, 300), color=(102, 126, 234))
+                    draw = ImageDraw.Draw(img)
+                    draw.text((150, 150), "No Image", fill="white", anchor="mm")
+                    img.save(placeholder_path)
+                    logger.info("Created placeholder image")
+                except ImportError:
+                    logger.warning("PIL not installed, skipping placeholder creation")
+            
+            # Add welcome notification
+            notification = {
+                'id': int(datetime.now().timestamp() * 1000),
+                'message': f'Welcome to Karanja Shoe Store! Data stored in Backblaze B2 bucket: {B2_CONFIG["BUCKET_NAME"]}',
+                'type': 'info',
+                'timestamp': datetime.now().isoformat(),
+                'read': False
+            }
+            b2_store.notifications.insert(0, notification)
+            b2_store.save_notifications()
+            logger.info("Sample data initialized")
+    except Exception as e:
+        logger.error(f"Error initializing data: {e}")
+
+# Initialize sample data
+init_sample_data()
 
 # ==================== RUN APPLICATION ====================
 if __name__ == '__main__':
