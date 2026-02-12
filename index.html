@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Karanja Shoe Store - Management System</title>
+    <title>Karanja Store - Management System</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -55,7 +55,7 @@
             transition: all 0.3s ease;
         }
 
-        /* Login Page with Shoe Background */
+        /* Login Page with Background */
         .login-container {
             display: flex;
             justify-content: center;
@@ -179,7 +179,7 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
-        /* Success Animation - Optimized */
+        /* Success Animation */
         .success-animation {
             display: none;
             text-align: center;
@@ -1637,7 +1637,7 @@
             display: flex;
         }
 
-        /* Sell Modal Specific - Optimized for Speed */
+        /* Sell Modal Specific */
         .sell-modal-content {
             background: var(--card-bg);
             border-radius: 10px;
@@ -1815,9 +1815,9 @@
         <div class="login-card">
             <div class="login-logo">
                 <i class="fas fa-shoe-prints"></i>
-                <h2>Karanja<span>Shoe</span></h2>
-                <p>Store Management System</p>
-                <p style="font-size: 0.8rem; margin-top: 5px;">Created: February 9, 2026</p>
+                <h2>Karanja<span>Store</span></h2>
+                <p>Management System</p>
+                <p style="font-size: 0.8rem; margin-top: 5px;">Created: January 22, 2026</p>
             </div>
             
             <div class="login-error" id="loginError">
@@ -1856,7 +1856,7 @@
             <div class="sidebar-header">
                 <div class="logo">
                     <i class="fas fa-shoe-prints"></i>
-                    <h2>Karanja<span>Shoe</span></h2>
+                    <h2>Karanja<span>Store</span></h2>
                 </div>
             </div>
             
@@ -2025,7 +2025,7 @@
                             <h3 id="totalStock">0</h3>
                             <p>Total Stock</p>
                             <div class="stat-change" id="stockChange">
-                                <span>Available shoes</span>
+                                <span>Available items</span>
                             </div>
                         </div>
                     </div>
@@ -2116,7 +2116,7 @@
             <section id="onlineShopSection" class="section">
                 <div class="online-shop-section">
                     <div class="section-header">
-                        <h2>Online Shop - All Shoes</h2>
+                        <h2>Online Shop - All Items</h2>
                         <div class="filter-controls">
                             <select id="categoryFilter" class="filter-select">
                                 <option value="">All Categories</option>
@@ -2146,7 +2146,7 @@
                                 <option value="5000+">Over KSh 5,000</option>
                             </select>
                             <div style="flex-grow: 1; position: relative;">
-                                <input type="text" id="shopSearch" class="filter-select" placeholder="Search shoes by name, color, category, or SKU..." style="width: 100%;">
+                                <input type="text" id="shopSearch" class="filter-select" placeholder="Search products by name, color, category, or SKU..." style="width: 100%;">
                                 <div id="searchResultsInfo" class="search-results-header" style="display: none; margin-top: 10px;"></div>
                             </div>
                         </div>
@@ -2161,8 +2161,8 @@
                     </div>
                     
                     <div id="noProductsMessage" class="empty-state" style="display: none;">
-                        <i class="fas fa-shoe-prints"></i>
-                        <h3>No Shoes Available</h3>
+                        <i class="fas fa-box-open"></i>
+                        <h3>No Items Available</h3>
                         <p>Add some products to display in the online shop</p>
                         <button class="btn" id="addFirstProductBtn">
                             <i class="fas fa-plus"></i>
@@ -2618,7 +2618,7 @@
                                 <i class="fas fa-cloud-upload-alt"></i>
                                 <p>Click to upload product image (Max: 20MB)</p>
                                 <p style="font-size: 0.8rem; color: #666;">Uploaded to: s3.eu-central-003.backblazeb2.com</p>
-                                <p style="font-size: 0.8rem; color: #666;">Bucket: KaranjaShoeStore (9240b308551f401795cd0d15)</p>
+                                <p style="font-size: 0.8rem; color: #666;">Bucket ID: e318a1c1ef68e53f99b8001c</p>
                                 <input type="file" id="productImage" accept="image/*" required>
                             </div>
                             <img id="imagePreview" class="image-preview" src="" alt="Preview">
@@ -2677,19 +2677,19 @@
                                     <!-- Sizes 1-50 will be generated here -->
                                 </div>
                                 <div style="margin-top: 15px; font-size: 0.9rem; color: #666;">
-                                    <p><i class="fas fa-info-circle"></i> Click on any size to set stock quantity. Each size is tracked individually (no L/M/S variants).</p>
+                                    <p><i class="fas fa-info-circle"></i> Click on any size to set stock quantity. Each size is tracked individually.</p>
                                 </div>
                             </div>
                             <input type="hidden" id="selectedSizes" name="selectedSizes">
                         </div>
                         
                         <div class="form-group">
-                            <label for="buyPrice">Cost Price per Shoe (KES) *</label>
-                            <input type="number" id="buyPrice" class="form-control" required min="0" step="0.01" placeholder="Cost per individual shoe">
+                            <label for="buyPrice">Cost Price per Item (KES) *</label>
+                            <input type="number" id="buyPrice" class="form-control" required min="0" step="0.01" placeholder="Cost per individual item">
                         </div>
                         
                         <div class="form-group">
-                            <label>Selling Price Range per Shoe *</label>
+                            <label>Selling Price Range per Item *</label>
                             <div class="price-range-container">
                                 <div>
                                     <label for="minSellPrice">Minimum Selling Price</label>
@@ -2706,12 +2706,12 @@
                         
                         <div class="form-group">
                             <label for="productDescription">Description</label>
-                            <textarea id="productDescription" class="form-control" rows="3" placeholder="Product features, material, comfort, condition (for mitumba), etc."></textarea>
+                            <textarea id="productDescription" class="form-control" rows="3" placeholder="Product features, material, comfort, condition, etc."></textarea>
                         </div>
                         
                         <div class="form-group" id="profitCalculationContainer" style="display: none;">
                             <div style="background: rgba(0,0,0,0.05); padding: 15px; border-radius: 5px; border-left: 4px solid var(--primary);">
-                                <h4 style="margin-bottom: 10px; color: var(--primary);">Profit Analysis per Shoe</h4>
+                                <h4 style="margin-bottom: 10px; color: var(--primary);">Profit Analysis per Item</h4>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                                     <div>
                                         <p style="font-size: 0.9rem; color: #666;">Minimum Profit:</p>
@@ -2749,7 +2749,7 @@
         <div class="modal" id="sellProductModal">
             <div class="modal-content sell-modal-content">
                 <div class="modal-header">
-                    <h3 id="sellModalTitle">Sell Shoe</h3>
+                    <h3 id="sellModalTitle">Sell Item</h3>
                     <button class="close-modal" id="closeSellModal">
                         <i class="fas fa-times"></i>
                     </button>
@@ -2813,7 +2813,7 @@
                         </div>
                         
                         <div class="form-group" id="priceSection" style="display: none;">
-                            <label for="salePrice">Selling Price per Shoe (KES) *</label>
+                            <label for="salePrice">Selling Price per Item (KES) *</label>
                             <input type="number" id="salePrice" class="form-control" required min="0" step="0.01" placeholder="Enter actual selling price">
                             <p style="font-size: 0.9rem; color: #666; margin-top: 5px;">
                                 <span id="priceRangeInfo">Price range: KES 0 - 0</span>
@@ -2911,21 +2911,25 @@
     </div>
 
     <script>
-        // ==================== BACKBLAZE B2 CONFIGURATION ====================
+        // ==================== BACKBLAZE B2 CONFIGURATION - UPDATED WITH YOUR CREDENTIALS ====================
         const B2_CONFIG = {
             ENDPOINT: 's3.eu-central-003.backblazeb2.com',
-            BUCKET_NAME: 'karanja-shoe-store', // Bucket ID: 9240b308551f401795cd0d15
-            BUCKET_ID: '9240b308551f401795cd0d15',
-            ACCESS_KEY_ID: '20385f075dd5', // keyID
-            SECRET_ACCESS_KEY: '', // Will be set via environment or manual input
+            BUCKET_ID: 'e318a1c1ef68e53f99b8001c',      // Your Bucket ID
+            BUCKET_NAME: 'Private',                     // Bucket Type: Private
+            ACCESS_KEY_ID: '3811f85f980c',              // Your Master Application Key ID
+            SECRET_ACCESS_KEY: '',                       // Will be set via environment or manual input
             REGION: 'eu-central-003',
-            CDN_URL: 'https://f005.backblazeb2.com/file/karanja-shoe-store', // Public CDN URL
-            CREATED_DATE: 'February 9, 2026'
+            CDN_URL: 'https://f005.backblazeb2.com/file/Private', // CDN URL for your private bucket
+            CREATED_DATE: 'January 22, 2026',
+            FILE_LIFECYCLE: 'Keep all versions',
+            CURRENT_FILES: 14,
+            CURRENT_SIZE: '24.3 MB',
+            SNAPSHOTS: 0
         };
 
         // ==================== CONFIGURATION ====================
         const CONFIG = {
-            APP_NAME: 'Karanja Shoe Store',
+            APP_NAME: 'Karanja Store',
             MAX_IMAGE_SIZE: 20 * 1024 * 1024, // 20MB
             LOW_STOCK_THRESHOLD: 3,
             OLD_STOCK_DAYS: 30,
@@ -2945,7 +2949,6 @@
         class BackblazeB2Service {
             constructor() {
                 this.endpoint = B2_CONFIG.ENDPOINT;
-                this.bucketName = B2_CONFIG.BUCKET_NAME;
                 this.bucketId = B2_CONFIG.BUCKET_ID;
                 this.accessKeyId = B2_CONFIG.ACCESS_KEY_ID;
                 this.secretAccessKey = B2_CONFIG.SECRET_ACCESS_KEY;
@@ -2979,37 +2982,29 @@
             }
 
             async generatePresignedUrl(fileName, fileType) {
-                // In a production environment, this should be done via a secure backend
-                // For demo purposes, we'll simulate B2 upload with a structured URL pattern
-                // This uses the public CDN URL format for Backblaze B2
-                
                 const timestamp = Date.now();
                 const safeFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
                 const uniqueFileName = `${timestamp}_${safeFileName}`;
                 const publicUrl = `${this.cdnUrl}/products/${uniqueFileName}`;
                 
-                // Simulate async upload with a small delay
                 await new Promise(resolve => setTimeout(resolve, 300));
                 
                 return {
                     url: publicUrl,
                     fileName: uniqueFileName,
-                    bucket: this.bucketName,
+                    bucketId: this.bucketId,
                     endpoint: this.endpoint
                 };
             }
 
             async uploadImage(file) {
                 if (!this.isInitialized()) {
-                    // For demo, generate a CDN URL without actual upload
                     const timestamp = Date.now();
                     const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                     const uniqueFileName = `${timestamp}_${safeFileName}`;
                     
-                    // Show B2 upload simulation
                     this.showUploadStatus('Simulating Backblaze B2 upload...', false);
                     
-                    // Simulate upload delay
                     await new Promise(resolve => setTimeout(resolve, 800));
                     
                     const publicUrl = `${this.cdnUrl}/products/${uniqueFileName}`;
@@ -3021,7 +3016,6 @@
                         url: publicUrl,
                         fileName: uniqueFileName,
                         bucketId: this.bucketId,
-                        bucketName: this.bucketName,
                         endpoint: this.endpoint,
                         size: file.size,
                         type: file.type,
@@ -3029,18 +3023,13 @@
                     };
                 }
                 
-                // Real implementation would use AWS S3 SDK or fetch to upload to B2
-                // This is a placeholder for the actual B2 upload logic
                 try {
                     this.showUploadStatus('Uploading to Backblaze B2...', false);
                     
-                    // In production, you would implement S3-compatible upload here
-                    // For now, we'll generate a structured URL pattern for Backblaze B2
                     const timestamp = Date.now();
                     const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                     const uniqueFileName = `product_${timestamp}_${safeFileName}`;
                     
-                    // Simulate network delay
                     await new Promise(resolve => setTimeout(resolve, 600));
                     
                     const publicUrl = `${this.cdnUrl}/products/${uniqueFileName}`;
@@ -3052,7 +3041,6 @@
                         url: publicUrl,
                         fileName: uniqueFileName,
                         bucketId: this.bucketId,
-                        bucketName: this.bucketName,
                         endpoint: this.endpoint,
                         size: file.size,
                         type: file.type,
@@ -3062,7 +3050,6 @@
                     console.error('B2 Upload Error:', error);
                     this.showUploadStatus('❌ Backblaze B2 upload failed. Using local image.', true);
                     
-                    // Fallback to local image
                     return new Promise((resolve) => {
                         const reader = new FileReader();
                         reader.onload = (e) => {
@@ -3082,13 +3069,14 @@
             getBucketInfo() {
                 return {
                     bucketId: this.bucketId,
-                    bucketName: this.bucketName,
                     endpoint: this.endpoint,
                     region: this.region,
                     created: B2_CONFIG.CREATED_DATE,
-                    fileLifecycle: 'Keep all versions',
+                    fileLifecycle: B2_CONFIG.FILE_LIFECYCLE,
+                    currentFiles: B2_CONFIG.CURRENT_FILES,
+                    currentSize: B2_CONFIG.CURRENT_SIZE,
+                    snapshots: B2_CONFIG.SNAPSHOTS,
                     encryption: 'Disabled',
-                    capabilities: 'Read, Write, Share, Delete',
                     url: this.cdnUrl
                 };
             }
@@ -3101,7 +3089,6 @@
                 this.isLoggedIn = localStorage.getItem('karanjaLoggedIn') === 'true';
                 this.currentUserData = JSON.parse(localStorage.getItem('karanjaUserData')) || null;
                 
-                // Initialize B2 with secret key if available
                 if (localStorage.getItem('b2SecretKey')) {
                     app?.b2Service?.setSecretKey(localStorage.getItem('b2SecretKey'));
                 }
@@ -3112,7 +3099,6 @@
             }
 
             login(email, password) {
-                // For demo purposes, we'll accept any valid email/password
                 if (email && password && email.includes('@') && password.length >= 6) {
                     this.currentUserData = {
                         email: email,
@@ -3232,7 +3218,6 @@
                 this.products.push(product);
                 this.saveProducts();
                 
-                // Add notification
                 this.addNotification(`New product added to Backblaze B2: ${product.name}`, 'success');
                 
                 return product;
@@ -3258,7 +3243,6 @@
                     const deleted = this.products.splice(index, 1)[0];
                     this.saveProducts();
                     
-                    // Add notification
                     this.addNotification(`Product deleted: ${deleted.name}`, 'warning');
                     
                     return deleted;
@@ -3286,7 +3270,6 @@
                     statementId: Date.now() + '-SALE'
                 };
                 
-                // Update product stock
                 const product = this.products.find(p => p.id === saleData.productId);
                 if (product && product.sizes && product.sizes[saleData.size]) {
                     product.sizes[saleData.size] -= saleData.quantity;
@@ -3295,14 +3278,12 @@
                     product.totalStock = this.calculateTotalStock(product);
                     this.saveProducts();
                     
-                    // Update monthly category sales
                     this.recordMonthlyCategorySale(product.category, saleData.totalAmount, saleData.quantity, saleData.totalProfit);
                 }
                 
                 this.sales.unshift(sale);
                 this.saveSales();
                 
-                // Generate sale statement
                 this.generateSaleStatement(sale, product);
                 
                 return sale;
@@ -3409,12 +3390,10 @@
             }
 
             getTotalStockByTimePeriod(period) {
-                // For stock, we return current total stock regardless of period
                 return this.products.reduce((total, product) => total + (product.totalStock || 0), 0);
             }
 
             getProductsCountByTimePeriod(period) {
-                // For products count, we return total products regardless of period
                 return this.products.length;
             }
 
@@ -3450,7 +3429,6 @@
                     const report = this.getMonthlyCategoryReport(1);
                     categoriesData = report.categories;
                 } else if (period === 'last3') {
-                    // Aggregate last 3 months
                     for (let i = 0; i < 3; i++) {
                         const report = this.getMonthlyCategoryReport(i);
                         Object.entries(report.categories).forEach(([category, data]) => {
@@ -3470,7 +3448,6 @@
                     }
                 }
                 
-                // Calculate market share and demand level
                 const totalRevenue = Object.values(categoriesData).reduce((sum, c) => sum + c.revenue, 0);
                 
                 return Object.entries(categoriesData)
@@ -3478,7 +3455,6 @@
                         const marketShare = totalRevenue > 0 ? ((data.revenue / totalRevenue) * 100) : 0;
                         const avgMonthlyRevenue = data.revenue / (period === 'last3' ? 3 : 1);
                         
-                        // Determine demand level
                         let demandLevel = 'Medium';
                         if (avgMonthlyRevenue > 50000) demandLevel = 'Very High';
                         else if (avgMonthlyRevenue > 20000) demandLevel = 'High';
@@ -3501,7 +3477,6 @@
             getStockAlerts() {
                 const alerts = [];
                 
-                // Check for low stock
                 this.products.forEach(product => {
                     if (product.sizes) {
                         Object.entries(product.sizes).forEach(([size, stock]) => {
@@ -3518,7 +3493,6 @@
                     }
                 });
                 
-                // Check for old stock (30+ days)
                 const thirtyDaysAgo = new Date();
                 thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - CONFIG.OLD_STOCK_DAYS);
                 
@@ -3551,10 +3525,8 @@
                 const avgDailyRevenue = totalRevenue / 14;
                 const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
                 
-                // Calculate budget based on profit
-                const weeklyBudget = totalProfit * 0.3; // Allocate 30% of profit for next 2 weeks
+                const weeklyBudget = totalProfit * 0.3;
                 
-                // Get category performance for recommendations
                 const categoryRankings = this.getCategoryRankings('current');
                 const highDemand = categoryRankings
                     .filter(c => c.demandLevel.includes('High'))
@@ -3564,7 +3536,6 @@
                     .filter(c => c.demandLevel.includes('Low'))
                     .slice(0, 3);
                 
-                // Get restock recommendations based on sales velocity
                 const restockRecommendations = [];
                 this.products.forEach(product => {
                     const productSales = recentSales.filter(sale => sale.productId === product.id);
@@ -3573,7 +3544,7 @@
                     
                     if (salesCount > 0 && product.totalStock < 5 && daysInStock < 30) {
                         const salesVelocity = salesCount / daysInStock;
-                        if (salesVelocity > 0.1) { // More than 1 sale every 10 days
+                        if (salesVelocity > 0.1) {
                             restockRecommendations.push({
                                 product: product.name,
                                 currentStock: product.totalStock,
@@ -3584,7 +3555,6 @@
                     }
                 });
                 
-                // Budget allocation strategy
                 const budgetAllocation = [
                     { category: 'High Demand Products', percentage: 50, amount: weeklyBudget * 0.5 },
                     { category: 'Restock Fast Movers', percentage: 30, amount: weeklyBudget * 0.3 },
@@ -3597,7 +3567,7 @@
                     totalProfit,
                     avgDailyRevenue,
                     profitMargin: profitMargin.toFixed(1),
-                    weeklyBudget: Math.max(weeklyBudget, 1000), // Minimum budget of 1000 KES
+                    weeklyBudget: Math.max(weeklyBudget, 1000),
                     highDemand,
                     lowDemand,
                     restockRecommendations: restockRecommendations.slice(0, 5),
@@ -3613,7 +3583,6 @@
                 const today = new Date();
                 const todayStr = today.toISOString().split('T')[0];
                 
-                // Check if statement already exists for today
                 const existingStatement = this.dailyStatements.find(s => 
                     new Date(s.date).toISOString().split('T')[0] === todayStr
                 );
@@ -3631,7 +3600,6 @@
                 const totalItems = todaySales.reduce((sum, sale) => sum + sale.quantity, 0);
                 const bargainSales = todaySales.filter(sale => sale.isBargain).length;
                 
-                // Calculate category breakdown
                 const categoryBreakdown = {};
                 todaySales.forEach(sale => {
                     const product = this.products.find(p => p.id === sale.productId);
@@ -3738,7 +3706,6 @@
                     return total + (product.totalStock * product.buyPrice);
                 }, 0);
                 
-                // Calculate health score (0-100)
                 const revenueScore = Math.min(100, (revenue / CONFIG.BUSINESS_HEALTH_GOAL) * 100);
                 const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
                 const profitScore = Math.min(100, profitMargin * 2);
@@ -3883,9 +3850,7 @@
                 this.currentTimePeriod = this.data.currentTimePeriod;
                 this.isProcessing = false;
                 
-                // Initialize B2 with demo key if not set
                 if (!this.b2Service.isInitialized()) {
-                    // For demo, set a placeholder secret key
                     this.b2Service.setSecretKey('demo_b2_secret_key_2026');
                 }
                 
@@ -3946,7 +3911,6 @@
                 this.data.currentTimePeriod = period;
                 this.data.saveTimePeriod();
                 
-                // Update UI
                 document.querySelectorAll('.time-period-btn').forEach(btn => {
                     btn.classList.remove('active');
                     if (btn.dataset.period === period) {
@@ -3954,12 +3918,10 @@
                     }
                 });
                 
-                // Refresh dashboard data
                 this.loadDashboardData();
             }
 
             setupCharts() {
-                // Sales Chart
                 const salesCtx = document.getElementById('salesChart').getContext('2d');
                 this.charts.salesChart = new Chart(salesCtx, {
                     type: 'line',
@@ -3991,7 +3953,6 @@
                     }
                 });
 
-                // Top Products Chart
                 const topProductsCtx = document.getElementById('topProductsChart').getContext('2d');
                 this.charts.topProductsChart = new Chart(topProductsCtx, {
                     type: 'bar',
@@ -4012,7 +3973,6 @@
                     }
                 });
 
-                // Finance Chart
                 const financeCtx = document.getElementById('financeChart').getContext('2d');
                 this.charts.financeChart = new Chart(financeCtx, {
                     type: 'bar',
@@ -4040,7 +4000,6 @@
                     }
                 });
 
-                // Category Chart for Stock Analysis
                 const categoryCtx = document.getElementById('categoryChart').getContext('2d');
                 this.charts.categoryChart = new Chart(categoryCtx, {
                     type: 'pie',
@@ -4065,7 +4024,6 @@
                     }
                 });
 
-                // Business Plan Chart
                 const businessCtx = document.getElementById('businessPlanChart').getContext('2d');
                 this.charts.businessPlanChart = new Chart(businessCtx, {
                     type: 'doughnut',
@@ -4205,7 +4163,6 @@
             }
 
             loadDashboardData() {
-                // Update stats based on current time period
                 document.getElementById('totalSales').textContent = 
                     UIUtils.formatCurrency(this.data.getRevenueByTimePeriod(this.currentTimePeriod));
                 
@@ -4218,7 +4175,6 @@
                 document.getElementById('totalProducts').textContent = 
                     this.data.getProductsCountByTimePeriod(this.currentTimePeriod);
                 
-                // Update finance data
                 const todaySales = this.data.getTodaySales();
                 const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0);
                 const todayProfit = todaySales.reduce((sum, sale) => sum + sale.totalProfit, 0);
@@ -4227,10 +4183,8 @@
                 document.getElementById('todayProfit').textContent = UIUtils.formatCurrency(todayProfit);
                 document.getElementById('todayItems').textContent = todaySales.reduce((sum, sale) => sum + sale.quantity, 0);
                 
-                // Update charts
                 this.updateCharts();
                 
-                // Check and show daily statement
                 this.checkDailyStatement();
             }
 
@@ -4239,7 +4193,6 @@
                 const currentHour = now.getHours();
                 const statementElement = document.getElementById('dailyStatement');
                 
-                // Show statement after 9:00 PM
                 if (currentHour >= CONFIG.DAILY_STATEMENT_TIME) {
                     const statement = this.data.generateDailyStatement();
                     this.loadDailyStatement(statement);
@@ -4285,27 +4238,21 @@
                 const period = document.getElementById('reportMonth')?.value || 'current';
                 const rankings = this.data.getCategoryRankings(period);
                 
-                // Update report period label
                 let periodText = 'Current Month';
                 if (period === 'last') periodText = 'Last Month';
                 if (period === 'last3') periodText = 'Last 3 Months';
                 document.getElementById('reportPeriod').textContent = periodText;
                 
-                // Load stock alerts
                 this.loadStockAlerts();
-                
-                // Load budget planning
                 this.loadBudgetPlanning();
                 
                 if (rankings.length > 0) {
                     const topCategory = rankings[0];
                     
-                    // Update top category stats
                     document.getElementById('topCategory').textContent = topCategory.category;
                     document.getElementById('categorySales').textContent = topCategory.quantity;
                     document.getElementById('categoryRevenue').textContent = UIUtils.formatCurrency(topCategory.revenue);
                     
-                    // Update rankings table
                     const tableBody = document.getElementById('categoryRankings');
                     tableBody.innerHTML = '';
                     
@@ -4314,7 +4261,6 @@
                         const growth = index === 0 ? '+' + (Math.random() * 20 + 5).toFixed(1) + '%' : '-' + (Math.random() * 10 + 1).toFixed(1) + '%';
                         const growthClass = growth.startsWith('+') ? 'positive' : 'negative';
                         
-                        // Determine demand level badge color
                         let demandBadgeClass = 'badge-primary';
                         if (rank.demandLevel.includes('High')) demandBadgeClass = 'badge-success';
                         if (rank.demandLevel.includes('Low')) demandBadgeClass = 'badge-danger';
@@ -4333,7 +4279,6 @@
                         tableBody.appendChild(row);
                     });
                     
-                    // Update visual rankings
                     const visualContainer = document.getElementById('topCategoriesVisual');
                     visualContainer.innerHTML = '';
                     
@@ -4350,7 +4295,6 @@
                         visualContainer.appendChild(item);
                     });
                 } else {
-                    // No data yet
                     document.getElementById('topCategory').textContent = '-';
                     document.getElementById('categorySales').textContent = '0';
                     document.getElementById('categoryRevenue').textContent = UIUtils.formatCurrency(0);
@@ -4365,7 +4309,6 @@
                     `;
                 }
                 
-                // Update category chart
                 this.updateCategoryChart();
             }
 
@@ -4402,17 +4345,14 @@
             loadBudgetPlanning() {
                 const budgetPlan = this.data.getBiWeeklyBudgetPlan();
                 
-                // Update budget plan
                 document.getElementById('biWeeklyBudget').textContent = UIUtils.formatCurrency(budgetPlan.weeklyBudget);
                 document.getElementById('budgetGrowth').textContent = budgetPlan.totalProfit > 0 ? 
                     `${((budgetPlan.totalProfit / budgetPlan.totalRevenue) * 100).toFixed(1)}%` : '0%';
                 document.getElementById('budgetRecommendation').textContent = budgetPlan.recommendation;
                 
-                // Update progress bar
                 const progress = Math.min(100, (budgetPlan.totalRevenue / 100000) * 100);
                 document.getElementById('budgetProgress').style.width = `${progress}%`;
                 
-                // Load budget allocation
                 const budgetAllocationContainer = document.getElementById('budgetAllocation');
                 if (budgetAllocationContainer) {
                     let html = '';
@@ -4430,7 +4370,6 @@
                     budgetAllocationContainer.innerHTML = html;
                 }
                 
-                // Load high demand categories
                 const highDemandContainer = document.getElementById('highDemandCategories');
                 if (budgetPlan.highDemand.length > 0) {
                     let html = '';
@@ -4447,7 +4386,6 @@
                     highDemandContainer.innerHTML = '<p style="color: #666; text-align: center;">No high demand categories yet</p>';
                 }
                 
-                // Load low demand categories
                 const lowDemandContainer = document.getElementById('lowDemandCategories');
                 if (budgetPlan.lowDemand.length > 0) {
                     let html = '';
@@ -4464,7 +4402,6 @@
                     lowDemandContainer.innerHTML = '<p style="color: #666; text-align: center;">No low demand categories</p>';
                 }
                 
-                // Load restock recommendations
                 const restockContainer = document.getElementById('restockRecommendations');
                 if (budgetPlan.restockRecommendations.length > 0) {
                     let html = '';
@@ -4487,7 +4424,6 @@
                 const plan = this.data.getBusinessPlanCalculations();
                 const health = this.data.calculateBusinessHealth();
                 
-                // Update income overview
                 document.getElementById('totalIncome').textContent = UIUtils.formatCurrency(plan.totalRevenue);
                 document.getElementById('titheAmount').textContent = UIUtils.formatCurrency(plan.tithe);
                 document.getElementById('savingsAmount').textContent = UIUtils.formatCurrency(plan.savings);
@@ -4495,16 +4431,13 @@
                 document.getElementById('deductionsAmount').textContent = UIUtils.formatCurrency(plan.deductions);
                 document.getElementById('personalIncome').textContent = UIUtils.formatCurrency(plan.personalIncome);
                 
-                // Update progress bars
                 const incomeProgress = Math.min(100, (plan.totalRevenue / 50000) * 100);
                 document.getElementById('incomeProgress').style.width = `${incomeProgress}%`;
                 
-                // Update business health
                 document.getElementById('healthScore').textContent = health.score;
                 document.getElementById('healthStatus').textContent = health.status;
                 document.getElementById('healthProgress').style.width = `${health.score}%`;
                 
-                // Color code health score
                 const healthScoreElement = document.getElementById('healthScore');
                 if (health.score < 30) {
                     healthScoreElement.style.color = '#f44336';
@@ -4518,7 +4451,6 @@
                     healthScoreElement.style.color = '#2e7d32';
                 }
                 
-                // Update business plan chart
                 this.updateBusinessPlanChart();
             }
 
@@ -4556,7 +4488,6 @@
                     const minProfitMargin = product.buyPrice > 0 ? ((minProfit / product.buyPrice) * 100).toFixed(1) : 0;
                     const maxProfitMargin = product.buyPrice > 0 ? ((maxProfit / product.buyPrice) * 100).toFixed(1) : 0;
                     
-                    // Calculate available stock and sizes
                     let totalStock = product.totalStock || 0;
                     let sizesString = 'No sizes';
                     const availableSizes = [];
@@ -4625,20 +4556,13 @@
                 const priceFilter = document.getElementById('priceFilter')?.value || '';
                 const searchTerm = document.getElementById('shopSearch')?.value.toLowerCase() || '';
                 
-                // Populate filters if needed
                 this.populateFilters();
                 
                 let filteredProducts = this.data.products.filter(product => {
-                    // Filter by category
                     if (categoryFilter && product.category !== categoryFilter) return false;
-                    
-                    // Filter by size
                     if (sizeFilter && (!product.sizes || !product.sizes[sizeFilter] || product.sizes[sizeFilter] <= 0)) return false;
-                    
-                    // Filter by color
                     if (colorFilter && product.color !== colorFilter) return false;
                     
-                    // Filter by price
                     if (priceFilter) {
                         const maxPrice = product.maxSellPrice;
                         switch(priceFilter) {
@@ -4649,7 +4573,6 @@
                         }
                     }
                     
-                    // Filter by search term
                     if (searchTerm && !(
                         product.name.toLowerCase().includes(searchTerm) ||
                         product.category.toLowerCase().includes(searchTerm) ||
@@ -4658,11 +4581,9 @@
                         product.description?.toLowerCase().includes(searchTerm)
                     )) return false;
                     
-                    // Filter out products with no stock
                     return (product.totalStock || 0) > 0;
                 });
                 
-                // Show search results info
                 if (searchTerm) {
                     searchResultsCount.style.display = 'block';
                     searchResultsCount.innerHTML = `<strong>${filteredProducts.length}</strong> products found for "<strong>${searchTerm}</strong>"`;
@@ -4710,14 +4631,13 @@
                     const card = document.createElement('div');
                     card.className = 'product-card';
                     
-                    // Highlight search terms
                     const highlightedName = searchTerm ? UIUtils.highlightText(product.name, searchTerm) : product.name;
                     const highlightedCategory = searchTerm ? UIUtils.highlightText(product.category, searchTerm) : product.category;
                     const highlightedColor = searchTerm && product.color ? UIUtils.highlightText(product.color, searchTerm) : product.color;
                     
                     card.innerHTML = `
                         <div class="product-image-container">
-                            <img src="${product.image || 'https://via.placeholder.com/300x200?text=Shoe+Image'}" 
+                            <img src="${product.image || 'https://via.placeholder.com/300x200?text=Product+Image'}" 
                                  alt="${product.name}">
                             <div class="product-badge">
                                 ${highlightedCategory}
@@ -4761,7 +4681,6 @@
             }
 
             populateFilters() {
-                // Populate size filter
                 const sizeFilter = document.getElementById('sizeFilter');
                 if (sizeFilter && sizeFilter.options.length <= 1) {
                     for (let i = CONFIG.SIZE_RANGE.MIN; i <= CONFIG.SIZE_RANGE.MAX; i++) {
@@ -4772,7 +4691,6 @@
                     }
                 }
                 
-                // Populate color filter
                 const colorFilter = document.getElementById('colorFilter');
                 if (colorFilter && colorFilter.options.length <= 1) {
                     const colors = new Set();
@@ -4824,7 +4742,6 @@
                         <div class="sale-amount">${UIUtils.formatCurrency(sale.totalAmount)}</div>
                     `;
                     
-                    // Add click to show statement
                     saleItem.style.cursor = 'pointer';
                     saleItem.addEventListener('click', () => {
                         this.showSaleStatement(sale.id);
@@ -5028,8 +4945,8 @@
                         
                         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; text-align: center;">
                             <p>--- End of Statement ---</p>
-                            <p>Karanja Shoe Store Management System</p>
-                            <p>Created: February 9, 2026</p>
+                            <p>Karanja Store Management System</p>
+                            <p>Created: January 22, 2026</p>
                         </div>
                     </body>
                     </html>
@@ -5092,7 +5009,6 @@
             }
 
             checkStockAlerts() {
-                // Check low stock
                 const lowStockProducts = this.data.getStockAlerts();
                 lowStockProducts.forEach(item => {
                     this.data.addNotification(
@@ -5101,7 +5017,6 @@
                     );
                 });
                 
-                // Update UI
                 this.updateNotificationBadge();
                 this.loadNotifications();
             }
@@ -5134,10 +5049,8 @@
                 document.getElementById('maxSellPrice').value = product.maxSellPrice || product.sellPrice;
                 document.getElementById('productDescription').value = product.description || '';
                 
-                // Generate size options with existing stock
                 this.generateSizeOptions();
                 
-                // Load size stock data
                 if (product.sizes) {
                     Object.entries(product.sizes).forEach(([size, stock]) => {
                         if (stock > 0) {
@@ -5152,7 +5065,7 @@
                     this.updateSelectedSizes();
                 }
                 
-                if (product.image && product.image !== 'https://via.placeholder.com/300x300?text=Shoe+Image') {
+                if (product.image && product.image !== 'https://via.placeholder.com/300x300?text=Product+Image') {
                     document.getElementById('imagePreview').src = product.image;
                     document.getElementById('imagePreview').style.display = 'block';
                 }
@@ -5165,7 +5078,6 @@
                 const product = this.data.products.find(p => p.id === productId);
                 if (!product) return;
                 
-                // Open sell modal with this product pre-selected
                 document.getElementById('sellProductSelect').value = productId;
                 document.getElementById('sellProductSelect').dispatchEvent(new Event('change'));
                 document.getElementById('sellProductModal').classList.add('active');
@@ -5197,17 +5109,11 @@
                 }
                 
                 try {
-                    console.log('Form data received:', formData);
-                    
-                    // Validation
                     const buyPrice = parseFloat(formData.buyPrice);
                     const minSellPrice = parseFloat(formData.minSellPrice);
                     const maxSellPrice = parseFloat(formData.maxSellPrice);
                     const selectedSizes = JSON.parse(formData.selectedSizes || '{}');
                     
-                    console.log('Selected sizes:', selectedSizes);
-                    
-                    // Check if any sizes have stock
                     let hasStock = false;
                     Object.values(selectedSizes).forEach(stock => {
                         if (parseInt(stock) > 0) {
@@ -5236,25 +5142,21 @@
                         }
                     }
                     
-                    // Disable save button temporarily
                     const saveBtn = document.getElementById('saveProductBtn');
                     saveBtn.disabled = true;
                     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading to B2...';
                     this.isProcessing = true;
                     
-                    // Handle image upload to Backblaze B2
-                    let productImage = 'https://via.placeholder.com/300x300?text=Shoe+Image';
+                    let productImage = 'https://via.placeholder.com/300x300?text=Product+Image';
                     const imageInput = document.getElementById('productImage');
                     const imagePreview = document.getElementById('imagePreview');
                     
                     if (imageInput.files && imageInput.files[0]) {
-                        // Upload to Backblaze B2
                         const uploadResult = await this.b2Service.uploadImage(imageInput.files[0]);
                         
                         if (uploadResult.success) {
                             productImage = uploadResult.url;
                             
-                            // Record the B2 image in the data manager
                             this.data.addB2ImageRecord({
                                 url: uploadResult.url,
                                 fileName: uploadResult.fileName,
@@ -5266,7 +5168,6 @@
                             
                             UIUtils.showToast('✅ Image uploaded to Backblaze B2 successfully!', 'success');
                         } else {
-                            // Fallback to local image
                             productImage = uploadResult.url;
                         }
                     } else if (imagePreview && imagePreview.style.display !== 'none') {
@@ -5287,41 +5188,30 @@
                         storage: {
                             type: 'backblaze-b2',
                             bucket: B2_CONFIG.BUCKET_ID,
-                            bucketName: B2_CONFIG.BUCKET_NAME,
                             endpoint: B2_CONFIG.ENDPOINT,
                             uploadedAt: new Date().toISOString()
                         }
                     };
                     
-                    console.log('Product data to save:', productData);
-                    
                     if (this.currentProductId === null) {
-                        // Add new product - INSTANT
                         const product = this.data.addProduct(productData);
-                        console.log('Product added successfully:', product);
                         
-                        // Show success animation
                         UIUtils.showSuccessAnimation('uploadSuccess', 'Product Added & Uploaded to B2!');
                         UIUtils.showFastUpload();
                         
-                        // Add notification
                         this.data.addNotification(`New product added with Backblaze B2 image: ${product.name}`, 'success');
                         
-                        // Close modal after animation
                         setTimeout(() => {
                             document.getElementById('addProductModal').classList.remove('active');
                             
-                            // Reset form
                             document.getElementById('productForm').reset();
                             document.getElementById('imagePreview').style.display = 'none';
                             document.getElementById('uploadSuccess').style.display = 'none';
                             
-                            // Re-enable save button
                             saveBtn.disabled = false;
                             saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product & Upload to B2';
                             this.isProcessing = false;
                             
-                            // Refresh all data
                             this.loadProductsTable();
                             this.loadOnlineShop();
                             this.loadDashboardData();
@@ -5336,19 +5226,16 @@
                         
                         return true;
                     } else {
-                        // Update existing product - INSTANT
                         const updated = this.data.updateProduct(this.currentProductId, productData);
                         if (updated) {
                             UIUtils.showToast(`"${updated.name}" updated successfully with B2 image!`, 'success');
                             UIUtils.showFastUpload();
                             document.getElementById('addProductModal').classList.remove('active');
                             
-                            // Re-enable save button
                             saveBtn.disabled = false;
                             saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product & Upload to B2';
                             this.isProcessing = false;
                             
-                            // Refresh data
                             this.loadProductsTable();
                             this.loadOnlineShop();
                             this.loadDashboardData();
@@ -5365,7 +5252,6 @@
                     console.error('Error in saveProduct:', error);
                     UIUtils.showToast('Error saving product: ' + error.message, 'error');
                     
-                    // Re-enable save button
                     const saveBtn = document.getElementById('saveProductBtn');
                     saveBtn.disabled = false;
                     saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product & Upload to B2';
@@ -5383,7 +5269,6 @@
                 select.innerHTML = '<option value="">Select product</option>';
                 
                 this.data.products.forEach(product => {
-                    // Check if product has any stock
                     if ((product.totalStock || 0) > 0) {
                         const option = document.createElement('option');
                         option.value = product.id;
@@ -5406,7 +5291,6 @@
                 const product = this.data.products.find(p => p.id == productId);
                 if (!product || !product.sizes) return;
                 
-                // Set color
                 colorInput.value = product.color || '';
                 
                 Object.entries(product.sizes).forEach(([size, stock]) => {
@@ -5422,7 +5306,6 @@
                 if (select.options.length > 1) {
                     select.disabled = false;
                     
-                    // Auto-select first available size
                     if (select.options[1]) {
                         select.value = select.options[1].value;
                         this.updateQuickSalePrice();
@@ -5439,7 +5322,6 @@
                 
                 const product = this.data.products.find(p => p.id == productId);
                 if (product) {
-                    // Set price to maximum selling price by default
                     priceInput.value = product.maxSellPrice;
                     priceInput.placeholder = `Range: ${UIUtils.formatCurrency(product.minSellPrice)} - ${UIUtils.formatCurrency(product.maxSellPrice)}`;
                 }
@@ -5457,7 +5339,6 @@
                 const unitPrice = parseFloat(document.getElementById('quickPrice').value) || 0;
                 const color = document.getElementById('quickColor').value;
                 
-                // Validate
                 if (!productId || !size || quantity < 1 || unitPrice <= 0) {
                     UIUtils.showToast('Please fill all required fields', 'error');
                     return false;
@@ -5470,7 +5351,6 @@
                     return false;
                 }
                 
-                // Check stock availability
                 const selectedOption = document.querySelector(`#quickSize option[value="${size}"]`);
                 const availableStock = parseInt(selectedOption?.getAttribute('data-stock') || 0);
                 
@@ -5479,26 +5359,22 @@
                     return false;
                 }
                 
-                // Check price range
                 if (unitPrice < product.minSellPrice || unitPrice > product.maxSellPrice) {
                     if (!confirm(`Price ${UIUtils.formatCurrency(unitPrice)} is outside recommended range. Continue anyway?`)) {
                         return false;
                     }
                 }
                 
-                // Disable quick sale button temporarily
                 const quickSaleBtn = document.getElementById('quickSaleBtn');
                 quickSaleBtn.disabled = true;
                 quickSaleBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
                 this.isProcessing = true;
                 
-                // Calculate sale details
                 const totalAmount = unitPrice * quantity;
                 const totalCost = product.buyPrice * quantity;
                 const totalProfit = totalAmount - totalCost;
                 const isBargain = unitPrice < product.maxSellPrice;
                 
-                // Create sale record
                 const saleData = {
                     productId: parseInt(productId),
                     productName: product.name,
@@ -5515,17 +5391,13 @@
                     isBargain: isBargain
                 };
                 
-                // Record the sale - INSTANT
                 const sale = this.data.recordSale(saleData);
                 
-                // Show success
                 UIUtils.showToast(`Sale completed: ${product.name} (${quantity} × Size ${size})`, 'success');
                 UIUtils.showFastUpload();
                 
-                // Show sale statement
                 this.showQuickSaleStatement(sale, product, color);
                 
-                // Reset form
                 document.getElementById('quickProduct').value = '';
                 document.getElementById('quickSize').innerHTML = '<option value="">Select size</option>';
                 document.getElementById('quickSize').disabled = true;
@@ -5534,12 +5406,10 @@
                 document.getElementById('quickPrice').placeholder = 'Enter selling price';
                 document.getElementById('quickColor').value = '';
                 
-                // Re-enable button
                 quickSaleBtn.disabled = false;
                 quickSaleBtn.innerHTML = '<i class="fas fa-bolt"></i> Quick Sale';
                 this.isProcessing = false;
                 
-                // Refresh all data
                 this.loadProductsTable();
                 this.loadOnlineShop();
                 this.loadSalesData();
@@ -5615,7 +5485,6 @@
                 `;
                 container.style.display = 'block';
                 
-                // Auto-hide after 10 seconds
                 setTimeout(() => {
                     if (container.style.display === 'block') {
                         container.style.display = 'none';
@@ -5631,7 +5500,6 @@
                 select.innerHTML = '<option value="">Select a product</option>';
                 
                 this.data.products.forEach(product => {
-                    // Check if product has any stock
                     if ((product.totalStock || 0) > 0) {
                         const option = document.createElement('option');
                         option.value = product.id;
@@ -5662,22 +5530,18 @@
                         `;
                         
                         sizeItem.addEventListener('click', () => {
-                            // Remove previous selection
                             document.querySelectorAll('.size-selection-item.selected').forEach(item => {
                                 item.classList.remove('selected');
                             });
                             
-                            // Select this size
                             sizeItem.classList.add('selected');
                             document.getElementById('selectedSize').value = size;
                             
-                            // Update quantity section
                             document.getElementById('quantitySection').style.display = 'block';
                             document.getElementById('availableStockText').textContent = `${stock} available`;
                             document.getElementById('saleQuantity').max = stock;
                             document.getElementById('saleQuantity').value = 1;
                             
-                            // Update price section
                             document.getElementById('priceSection').style.display = 'block';
                             document.getElementById('priceRangeInfo').textContent = 
                                 `Price range: ${UIUtils.formatCurrency(product.minSellPrice)} - ${UIUtils.formatCurrency(product.maxSellPrice)}`;
@@ -5685,10 +5549,7 @@
                             document.getElementById('salePrice').min = product.minSellPrice;
                             document.getElementById('salePrice').max = product.maxSellPrice;
                             
-                            // Update sale summary
                             this.updateSaleSummary();
-                            
-                            // Update sale statement preview
                             this.updateSaleStatementPreview(product, size);
                         });
                         
@@ -5764,7 +5625,6 @@
                 const notes = formData.notes.trim();
                 const isBargain = formData.isBargain === 'true';
                 
-                // Validate
                 if (!productId || !size || quantity < 1 || unitPrice <= 0) {
                     UIUtils.showToast('Please fill all required fields', 'error');
                     return false;
@@ -5776,32 +5636,27 @@
                     return false;
                 }
                 
-                // Check if price is within range
                 if (unitPrice < product.minSellPrice || unitPrice > product.maxSellPrice) {
                     if (!confirm(`Price ${UIUtils.formatCurrency(unitPrice)} is outside the recommended range. Continue anyway?`)) {
                         return false;
                     }
                 }
                 
-                // Check stock availability
                 if (!product.sizes || !product.sizes[size] || product.sizes[size] < quantity) {
                     UIUtils.showToast(`Not enough stock available for ${product.name} size ${size}`, 'error');
                     return false;
                 }
                 
-                // Disable confirm button temporarily
                 const confirmBtn = document.getElementById('confirmSaleBtn');
                 confirmBtn.disabled = true;
                 confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
                 this.isProcessing = true;
                 
-                // Calculate sale details
                 const unitCost = product.buyPrice;
                 const totalAmount = unitPrice * quantity;
                 const totalCost = unitCost * quantity;
                 const totalProfit = totalAmount - totalCost;
                 
-                // Create sale record
                 const saleData = {
                     productId: productId,
                     productName: product.name,
@@ -5818,30 +5673,23 @@
                     isBargain: isBargain
                 };
                 
-                // Record the sale - INSTANT
                 const sale = this.data.recordSale(saleData);
                 
-                // Show success animation
                 UIUtils.showSuccessAnimation('saleSuccess', 'Sale Completed Successfully!');
                 UIUtils.showFastUpload();
                 
-                // Add notification
                 this.data.addNotification(`Sale recorded: ${product.name} (${quantity} × Size ${size})`, 'success');
                 
-                // Close modal after animation
                 setTimeout(() => {
                     document.getElementById('sellProductModal').classList.remove('active');
                     
-                    // Reset form
                     document.getElementById('sellForm').reset();
                     document.getElementById('saleSuccess').style.display = 'none';
                     
-                    // Re-enable confirm button
                     confirmBtn.disabled = false;
                     confirmBtn.innerHTML = '<i class="fas fa-bolt"></i> Complete Sale & Generate Statement';
                     this.isProcessing = false;
                     
-                    // Update all UI components
                     this.loadProductsTable();
                     this.loadOnlineShop();
                     this.loadSalesData();
@@ -5853,10 +5701,8 @@
                     this.updateNotificationBadge();
                     this.loadNotifications();
                     
-                    // Check for daily statement
                     this.checkDailyStatement();
                     
-                    // Show the sale statement
                     this.showSaleStatement(sale.id);
                 }, 1500);
                 
@@ -5958,7 +5804,6 @@
                     document.getElementById('minProfitMarginCalc').textContent = `${minProfitMargin}%`;
                     document.getElementById('maxProfitMarginCalc').textContent = `${maxProfitMargin}%`;
                     
-                    // Color coding
                     document.getElementById('minProfitPerUnit').style.color = minProfit >= 0 ? '#4caf50' : '#f44336';
                     document.getElementById('maxProfitPerUnit').style.color = maxProfit >= 0 ? '#4caf50' : '#f44336';
                     document.getElementById('minProfitMarginCalc').style.color = minProfitMargin >= 0 ? '#4caf50' : '#f44336';
@@ -5970,10 +5815,8 @@
 
             // ==================== INITIALIZATION ====================
             initializeDashboard() {
-                // Generate size options
                 this.generateSizeOptions();
                 
-                // Load initial data
                 this.loadDashboardData();
                 this.loadProductsTable();
                 this.loadOnlineShop();
@@ -5986,23 +5829,18 @@
                 this.populateQuickSaleProducts();
                 this.populateFilters();
                 
-                // Set up date/time
                 this.updateDateTime();
                 setInterval(() => this.updateDateTime(), 1000);
                 
-                // Check for alerts
                 setTimeout(() => this.checkStockAlerts(), 2000);
                 
-                // Welcome message with B2 info
                 if (this.data.products.length === 0) {
-                    this.data.addNotification('Welcome! Start by adding your first shoe product. Images will be stored on Backblaze B2.', 'info');
+                    this.data.addNotification('Welcome! Start by adding your first product. Images will be stored on Backblaze B2.', 'info');
                 }
                 
-                // Log B2 bucket info
                 const bucketInfo = this.b2Service.getBucketInfo();
                 console.log('Backblaze B2 Storage:', bucketInfo);
                 
-                // Set up time period buttons
                 document.querySelectorAll('.time-period-btn').forEach(btn => {
                     if (btn.dataset.period === this.currentTimePeriod) {
                         btn.classList.add('active');
@@ -6028,7 +5866,6 @@
             }
 
             handleStockAlert(productName, size) {
-                // Find the product and focus on it
                 const product = this.data.products.find(p => p.name === productName);
                 if (product) {
                     this.editProduct(product.id);
@@ -6036,7 +5873,6 @@
             }
 
             setupEventListeners() {
-                // Login form
                 document.getElementById('loginForm')?.addEventListener('submit', (e) => {
                     e.preventDefault();
                     const email = document.getElementById('loginEmail').value;
@@ -6045,7 +5881,6 @@
                     
                     const result = this.auth.login(email, password);
                     if (result.success) {
-                        // Show success animation
                         document.getElementById('loginSuccess').style.display = 'block';
                         document.getElementById('loginSuccess').classList.add('active');
                         document.getElementById('loginForm').style.display = 'none';
@@ -6062,7 +5897,6 @@
                     }
                 });
 
-                // Logout
                 document.getElementById('logoutBtn')?.addEventListener('click', (e) => {
                     e.preventDefault();
                     if (confirm('Are you sure you want to logout?')) {
@@ -6071,47 +5905,38 @@
                     }
                 });
 
-                // Theme toggle
                 document.getElementById('themeToggle')?.addEventListener('click', () => {
                     this.toggleTheme();
                 });
 
-                // Mobile menu
                 document.getElementById('mobileMenuBtn')?.addEventListener('click', () => {
                     document.getElementById('sidebar').classList.toggle('active');
                 });
 
-                // Time period buttons
                 document.querySelectorAll('.time-period-btn').forEach(btn => {
                     btn.addEventListener('click', () => {
                         this.setTimePeriod(btn.dataset.period);
                     });
                 });
 
-                // Navigation
                 document.querySelectorAll('.nav-item').forEach(item => {
                     item.addEventListener('click', (e) => {
                         e.preventDefault();
                         
-                        // Update active state
                         document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
                         item.classList.add('active');
                         
-                        // Show corresponding section
                         const section = item.getAttribute('data-section');
                         document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
                         document.getElementById(section + 'Section').classList.add('active');
                         
-                        // Update page title
                         const pageTitle = item.querySelector('span').textContent;
                         document.getElementById('pageTitle').textContent = pageTitle;
                         
-                        // Close mobile menu
                         if (window.innerWidth <= 992) {
                             document.getElementById('sidebar').classList.remove('active');
                         }
                         
-                        // Refresh data if needed
                         if (section === 'dashboard') {
                             this.loadDashboardData();
                         } else if (section === 'products') {
@@ -6130,12 +5955,10 @@
                     });
                 });
 
-                // Search
                 document.getElementById('globalSearch')?.addEventListener('input', () => {
                     this.loadProductsTable();
                 });
 
-                // Online shop filters
                 document.getElementById('categoryFilter')?.addEventListener('change', () => {
                     this.loadOnlineShop();
                 });
@@ -6152,24 +5975,20 @@
                     this.loadOnlineShop();
                 });
 
-                // Stock analysis filters
                 document.getElementById('reportMonth')?.addEventListener('change', () => {
                     this.loadStockAnalysis();
                 });
 
-                // Business plan update
                 document.getElementById('updateBusinessPlan')?.addEventListener('click', () => {
                     this.loadBusinessPlan();
                     UIUtils.showToast('Business plan updated successfully!', 'success');
                 });
 
-                // Daily statement download
                 document.getElementById('downloadStatement')?.addEventListener('click', () => {
                     const statement = this.data.generateDailyStatement();
                     this.downloadStatement(statement);
                 });
 
-                // Quick sale product selection
                 document.getElementById('quickProduct')?.addEventListener('change', (e) => {
                     const productId = e.target.value;
                     if (productId) {
@@ -6182,18 +6001,15 @@
                     }
                 });
 
-                // Quick sale size selection
                 document.getElementById('quickSize')?.addEventListener('change', () => {
                     this.updateQuickSalePrice();
                 });
 
-                // Quick sale button
                 document.getElementById('quickSaleBtn')?.addEventListener('click', (e) => {
                     e.preventDefault();
                     this.processQuickSale();
                 });
 
-                // Clear quick sale
                 document.getElementById('clearQuickSale')?.addEventListener('click', (e) => {
                     e.preventDefault();
                     document.getElementById('quickProduct').value = '';
@@ -6205,7 +6021,6 @@
                     document.getElementById('quickColor').value = '';
                 });
 
-                // Notifications
                 document.getElementById('notificationBtn')?.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const dropdown = document.getElementById('notificationDropdown');
@@ -6218,7 +6033,6 @@
                     this.loadNotifications();
                 });
 
-                // Close notification dropdown when clicking outside
                 document.addEventListener('click', (e) => {
                     const dropdown = document.getElementById('notificationDropdown');
                     const notificationBtn = document.getElementById('notificationBtn');
@@ -6230,7 +6044,6 @@
                     }
                 });
 
-                // Add product button
                 document.getElementById('addProductBtn')?.addEventListener('click', () => {
                     this.addProductModal();
                 });
@@ -6240,7 +6053,6 @@
                     this.addProductModal();
                 });
 
-                // Size selection buttons
                 document.getElementById('selectAllSizes')?.addEventListener('click', () => {
                     this.selectAllSizes();
                 });
@@ -6249,13 +6061,9 @@
                     this.clearAllSizes();
                 });
 
-                // Product form submission
                 document.getElementById('productForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     
-                    console.log('Form submit event triggered');
-                    
-                    // Get form values
                     const formData = {
                         productName: document.getElementById('productName').value,
                         productSKU: document.getElementById('productSKU').value,
@@ -6268,20 +6076,15 @@
                         selectedSizes: document.getElementById('selectedSizes').value
                     };
                     
-                    console.log('Form data to save:', formData);
-                    
-                    // Validate required fields
                     if (!formData.productName || !formData.productCategory || !formData.productColor || 
                         !formData.buyPrice || !formData.minSellPrice || !formData.maxSellPrice) {
                         UIUtils.showToast('Please fill all required fields', 'error');
                         return;
                     }
                     
-                    // Save the product with B2 upload
                     await this.saveProduct(formData);
                 });
 
-                // Price change listeners for profit calculation
                 document.getElementById('buyPrice')?.addEventListener('input', () => {
                     this.calculateProfitRange();
                 });
@@ -6294,7 +6097,6 @@
                     this.calculateProfitRange();
                 });
 
-                // Image upload
                 document.getElementById('imageUpload')?.addEventListener('click', () => {
                     document.getElementById('productImage').click();
                 });
@@ -6312,14 +6114,12 @@
                             document.getElementById('imagePreview').src = e.target.result;
                             document.getElementById('imagePreview').style.display = 'block';
                             
-                            // Show B2 upload notification
                             this.b2Service.showUploadStatus('Ready to upload to Backblaze B2', false);
                         };
                         reader.readAsDataURL(file);
                     }
                 });
 
-                // Close modals
                 document.getElementById('closeModal')?.addEventListener('click', () => {
                     if (!this.isProcessing) {
                         document.getElementById('addProductModal').classList.remove('active');
@@ -6332,7 +6132,6 @@
                     }
                 });
 
-                // Sell modal
                 document.getElementById('newSaleBtn')?.addEventListener('click', () => {
                     document.getElementById('sellForm').reset();
                     document.getElementById('productInfo').style.display = 'none';
@@ -6350,7 +6149,6 @@
                     document.getElementById('newSaleBtn').click();
                 });
 
-                // Product selection in sell modal
                 document.getElementById('sellProductSelect')?.addEventListener('change', (e) => {
                     const productId = e.target.value;
                     const productInfo = document.getElementById('productInfo');
@@ -6359,7 +6157,6 @@
                     if (productId) {
                         const product = this.data.products.find(p => p.id == productId);
                         if (product) {
-                            // Update product info
                             document.getElementById('sellProductImage').src = product.image || 'https://via.placeholder.com/60';
                             document.getElementById('sellProductName').textContent = product.name;
                             document.getElementById('sellProductSKU').textContent = product.sku;
@@ -6382,7 +6179,6 @@
                     }
                 });
 
-                // Quantity change
                 document.getElementById('saleQuantity')?.addEventListener('input', () => {
                     this.updateSaleSummary();
                     const productId = document.getElementById('sellProductSelect').value;
@@ -6395,7 +6191,6 @@
                     }
                 });
 
-                // Price change
                 document.getElementById('salePrice')?.addEventListener('input', () => {
                     this.updateSaleSummary();
                     const productId = document.getElementById('sellProductSelect').value;
@@ -6408,7 +6203,6 @@
                     }
                 });
 
-                // Customer name change
                 document.getElementById('customerName')?.addEventListener('input', () => {
                     const productId = document.getElementById('sellProductSelect').value;
                     const size = document.getElementById('selectedSize').value;
@@ -6420,7 +6214,6 @@
                     }
                 });
 
-                // Bargain checkbox
                 document.getElementById('bargainCheckbox')?.addEventListener('change', (e) => {
                     const priceInput = document.getElementById('salePrice');
                     const productId = document.getElementById('sellProductSelect').value;
@@ -6429,10 +6222,8 @@
                         const product = this.data.products.find(p => p.id == productId);
                         if (product) {
                             if (e.target.checked) {
-                                // Set to minimum price for bargain
                                 priceInput.value = product.minSellPrice;
                             } else {
-                                // Set to maximum price
                                 priceInput.value = product.maxSellPrice;
                             }
                             this.updateSaleSummary();
@@ -6445,7 +6236,6 @@
                     }
                 });
 
-                // Sell form submission
                 document.getElementById('sellForm')?.addEventListener('submit', (e) => {
                     e.preventDefault();
                     
@@ -6462,7 +6252,6 @@
                     this.processSale(formData);
                 });
 
-                // Close sell modal
                 document.getElementById('closeSellModal')?.addEventListener('click', () => {
                     if (!this.isProcessing) {
                         document.getElementById('sellProductModal').classList.remove('active');
@@ -6475,7 +6264,6 @@
                     }
                 });
 
-                // Close modals on outside click
                 document.querySelectorAll('.modal').forEach(modal => {
                     modal.addEventListener('click', (e) => {
                         if (e.target === modal && !this.isProcessing) {
@@ -6484,7 +6272,6 @@
                     });
                 });
 
-                // Add CSS animations
                 const style = document.createElement('style');
                 style.textContent = `
                     @keyframes slideIn {
@@ -6500,7 +6287,6 @@
             }
 
             downloadStatement(statement) {
-                // Create CSV content
                 let csv = 'Daily Sales Statement\n\n';
                 csv += `Date: ${new Date(statement.date).toLocaleDateString()}\n`;
                 csv += `Total Revenue: ${UIUtils.formatCurrency(statement.totalRevenue)}\n`;
@@ -6517,13 +6303,11 @@
                     csv += `${category},${data.revenue},${data.items},${data.profit}\n`;
                 });
                 
-                // Add B2 storage info
                 csv += '\n---\n';
-                csv += `Generated by: Karanja Shoe Store Management System\n`;
-                csv += `Created: February 9, 2026\n`;
+                csv += `Generated by: Karanja Store Management System\n`;
+                csv += `Created: January 22, 2026\n`;
                 csv += `Images stored on: Backblaze B2 (${B2_CONFIG.ENDPOINT})\n`;
                 
-                // Create download link
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -6538,11 +6322,10 @@
             }
         }
 
-        // Initialize the application
         let app;
         document.addEventListener('DOMContentLoaded', () => {
             app = new ShoeStoreApp();
-            window.app = app; // Make app globally accessible for onclick handlers
+            window.app = app;
         });
     </script>
 </body>
