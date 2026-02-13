@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory, make_response
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -112,7 +112,7 @@ class CustomJSONEncoder(json.JSONEncoder):
 
 app.json_encoder = CustomJSONEncoder
 
-# ==================== B2 DATA STORAGE MANAGER - FIXED VERSION ====================
+# ==================== B2 DATA STORAGE MANAGER ====================
 class B2DataStore:
     """All data stored in Backblaze B2 - Fixed version with proper error handling"""
     
@@ -326,42 +326,155 @@ if not data_store.users:
     data_store.save_users()
     logger.info("✓ Created default admin user in B2")
 
-# ==================== BACKBLAZE B2 HELPER FUNCTIONS ====================
-def generate_signed_url(s3_key, expiration=604800):
-    """Generate a pre-signed URL for private B2 bucket access"""
-    if not b2_client or not s3_key:
-        return None
+# ==================== PASSWORD CHANGE ROUTE ====================
+@app.route('/api/auth/change-password', methods=['POST'])
+@jwt_required()
+def change_password():
+    """Change user password"""
     try:
-        url = b2_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': B2_CONFIG['BUCKET_NAME'],
-                'Key': s3_key
-            },
-            ExpiresIn=expiration
-        )
-        return url
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        current_password = data.get('currentPassword')
+        new_password = data.get('newPassword')
+        
+        if not current_password or not new_password:
+            return jsonify({'error': 'Current password and new password are required'}), 400
+        
+        if len(new_password) < 6:
+            return jsonify({'error': 'New password must be at least 6 characters long'}), 400
+        
+        data_store.load_all_data()
+        
+        # Find user
+        user_index = -1
+        user = None
+        for i, u in enumerate(data_store.users):
+            if str(u['id']) == current_user_id:
+                user_index = i
+                user = u
+                break
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Verify current password
+        if not bcrypt.check_password_hash(user['password'], current_password):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        
+        # Update password
+        user['password'] = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        user['updated_at'] = datetime.now().isoformat()
+        
+        # Save updated user
+        data_store.users[user_index] = user
+        save_success = data_store.save_users()
+        
+        if not save_success:
+            return jsonify({'error': 'Failed to save password change to B2'}), 500
+        
+        # Add notification
+        notification = {
+            'id': int(datetime.now().timestamp() * 1000),
+            'message': 'Password changed successfully',
+            'type': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'read': False
+        }
+        data_store.notifications.insert(0, notification)
+        data_store.save_notifications()
+        
+        logger.info(f"✓ Password changed for user: {user['email']}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Password changed successfully'
+        }), 200
+        
     except Exception as e:
-        logger.error(f"Error generating signed URL: {e}")
-        return None
+        logger.error(f"Error changing password: {e}")
+        return jsonify({'error': str(e)}), 500
 
-def extract_s3_key_from_url(url):
-    """Extract S3 key from B2 URL"""
-    if not url:
-        return None
+# ==================== SPECIFIC USER MANAGEMENT ROUTES ====================
+@app.route('/api/auth/update-karanja-password', methods=['POST'])
+def update_karanja_password():
+    """Special route to update KARANJASHOESTORE@GMAIL.COM password - NO JWT REQUIRED for this specific operation"""
     try:
-        if B2_CONFIG['CDN_URL'] in url:
-            return url.replace(f"{B2_CONFIG['CDN_URL']}/", '')
-        if 'backblazeb2.com' in url:
-            import re
-            match = re.search(r'products/[^?]+', url)
-            if match:
-                return match.group(0)
-        if url.startswith('products/'):
-            return url
+        data = request.get_json()
+        new_password = data.get('newPassword')
+        confirm_password = data.get('confirmPassword')
+        secret_key = data.get('secretKey')
+        
+        # Simple security check - you can change this secret key
+        if secret_key != 'karanja-update-2026':
+            return jsonify({'error': 'Invalid secret key'}), 401
+        
+        if not new_password or not confirm_password:
+            return jsonify({'error': 'New password and confirmation are required'}), 400
+        
+        if new_password != confirm_password:
+            return jsonify({'error': 'Passwords do not match'}), 400
+        
+        if len(new_password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters long'}), 400
+        
+        data_store.load_all_data()
+        
+        # Find the specific user
+        target_email = 'KARANJASHOESTORE@GMAIL.COM'
+        user_index = -1
+        user = None
+        
+        for i, u in enumerate(data_store.users):
+            if u['email'].upper() == target_email:
+                user_index = i
+                user = u
+                break
+        
+        # If user doesn't exist, create it
+        if not user:
+            new_user = {
+                'id': int(datetime.now().timestamp() * 1000),
+                'email': target_email,
+                'password': bcrypt.generate_password_hash(new_password).decode('utf-8'),
+                'name': 'Karanja Shoe Store',
+                'role': 'admin',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
+            data_store.users.append(new_user)
+            save_success = data_store.save_users()
+            
+            if not save_success:
+                return jsonify({'error': 'Failed to create user in B2'}), 500
+            
+            logger.info(f"✓ Created user: {target_email}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'User created and password set successfully'
+            }), 201
+        else:
+            # Update existing user's password
+            user['password'] = bcrypt.generate_password_hash(new_password).decode('utf-8')
+            user['updated_at'] = datetime.now().isoformat()
+            
+            data_store.users[user_index] = user
+            save_success = data_store.save_users()
+            
+            if not save_success:
+                return jsonify({'error': 'Failed to update password in B2'}), 500
+            
+            logger.info(f"✓ Password updated for user: {target_email}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Password updated successfully'
+            }), 200
+        
     except Exception as e:
-        logger.error(f"Error extracting S3 key: {e}")
-    return None
+        logger.error(f"Error updating Karanja password: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # ==================== BACKBLAZE B2 UPLOAD ROUTE ====================
 @app.route('/api/b2/upload', methods=['POST'])
@@ -434,7 +547,44 @@ def upload_to_b2():
         logger.error(f"Error uploading to B2: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== PRODUCT ROUTES - FIXED ====================
+# ==================== BACKBLAZE B2 HELPER FUNCTIONS ====================
+def generate_signed_url(s3_key, expiration=604800):
+    """Generate a pre-signed URL for private B2 bucket access"""
+    if not b2_client or not s3_key:
+        return None
+    try:
+        url = b2_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': B2_CONFIG['BUCKET_NAME'],
+                'Key': s3_key
+            },
+            ExpiresIn=expiration
+        )
+        return url
+    except Exception as e:
+        logger.error(f"Error generating signed URL: {e}")
+        return None
+
+def extract_s3_key_from_url(url):
+    """Extract S3 key from B2 URL"""
+    if not url:
+        return None
+    try:
+        if B2_CONFIG['CDN_URL'] in url:
+            return url.replace(f"{B2_CONFIG['CDN_URL']}/", '')
+        if 'backblazeb2.com' in url:
+            import re
+            match = re.search(r'products/[^?]+', url)
+            if match:
+                return match.group(0)
+        if url.startswith('products/'):
+            return url
+    except Exception as e:
+        logger.error(f"Error extracting S3 key: {e}")
+    return None
+
+# ==================== PRODUCT ROUTES ====================
 @app.route('/api/products', methods=['GET'])
 @jwt_required()
 def get_products():
@@ -491,9 +641,8 @@ def get_public_products():
 @app.route('/api/products', methods=['POST'])
 @jwt_required()
 def create_product():
-    """Create new product - FIXED with better error handling"""
+    """Create new product"""
     try:
-        # Get form data
         name = request.form.get('name')
         price = request.form.get('price')
         description = request.form.get('description', '')
@@ -538,7 +687,6 @@ def create_product():
         if s3_key:
             signed_url = generate_signed_url(s3_key, expiration=604800)
         
-        # Generate unique ID
         product_id = int(datetime.now().timestamp() * 1000)
         
         product = {
@@ -569,7 +717,6 @@ def create_product():
             product['image'] = '/static/placeholder.png'
             product['image_source'] = 'placeholder'
         
-        # Add to store and save immediately
         data_store.products.append(product)
         save_success = data_store.save_products()
         
@@ -600,12 +747,10 @@ def create_product():
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
 @jwt_required()
 def update_product(product_id):
-    """Update existing product - FIXED with proper error handling"""
+    """Update existing product"""
     try:
-        # Reload data to ensure we have latest
         data_store.load_all_data()
         
-        # Find product
         product_index = None
         product = None
         for i, p in enumerate(data_store.products):
@@ -617,7 +762,6 @@ def update_product(product_id):
         if not product:
             return jsonify({'error': 'Product not found'}), 404
         
-        # Get form data
         name = request.form.get('name')
         description = request.form.get('description')
         category = request.form.get('category')
@@ -629,7 +773,6 @@ def update_product(product_id):
         image_url = request.form.get('image_url')
         sizes_json = request.form.get('sizes')
         
-        # Update fields if provided
         if name:
             product['name'] = name.strip()
         if description is not None:
@@ -672,7 +815,6 @@ def update_product(product_id):
         
         product['lastUpdated'] = datetime.now().isoformat()
         
-        # Update in list and save
         data_store.products[product_index] = product
         save_success = data_store.save_products()
         
@@ -692,12 +834,10 @@ def update_product(product_id):
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
 @jwt_required()
 def delete_product(product_id):
-    """Delete product - FIXED with proper error handling"""
+    """Delete product"""
     try:
-        # Reload data to ensure we have latest
         data_store.load_all_data()
         
-        # Find and remove product
         product = None
         new_products = []
         
@@ -710,14 +850,12 @@ def delete_product(product_id):
         if not product:
             return jsonify({'error': 'Product not found'}), 404
         
-        # Update products list
         data_store.cache['products'] = new_products
         save_success = data_store.save_products()
         
         if not save_success:
             return jsonify({'error': 'Failed to delete product from B2'}), 500
         
-        # Add notification
         notification = {
             'id': int(datetime.now().timestamp() * 1000),
             'message': f'Product deleted: {product["name"]}',
@@ -739,7 +877,9 @@ def delete_product(product_id):
 def serve_static(filename):
     """Serve static files"""
     try:
-        return send_from_directory('static', filename)
+        response = make_response(send_from_directory('static', filename))
+        response.headers['Cache-Control'] = 'public, max-age=86400'
+        return response
     except Exception as e:
         logger.error(f"Error serving static file {filename}: {e}")
         return jsonify({'error': 'Static file not found'}), 404
@@ -748,7 +888,9 @@ def serve_static(filename):
 def serve_upload(filename):
     """Serve uploaded files"""
     try:
-        return send_from_directory('static/uploads', filename)
+        response = make_response(send_from_directory('static/uploads', filename))
+        response.headers['Cache-Control'] = 'public, max-age=86400'
+        return response
     except Exception as e:
         logger.error(f"Error serving upload {filename}: {e}")
         return jsonify({'error': 'Uploaded file not found'}), 404
@@ -766,7 +908,7 @@ def login():
             return jsonify({'error': 'Email and password required'}), 400
         
         data_store.load_all_data()
-        user = next((u for u in data_store.users if u['email'] == email), None)
+        user = next((u for u in data_store.users if u['email'].lower() == email.lower()), None)
         
         if user and bcrypt.check_password_hash(user['password'], password):
             access_token = create_access_token(
@@ -887,7 +1029,6 @@ def create_sale():
         
         data_store.load_all_data()
         
-        # Find product
         product = None
         product_index = -1
         for i, p in enumerate(data_store.products):
@@ -903,7 +1044,6 @@ def create_sale():
         if size_key not in product['sizes'] or product['sizes'][size_key] < quantity:
             return jsonify({'error': 'Insufficient stock'}), 400
         
-        # Update stock
         product['sizes'][size_key] -= quantity
         if product['sizes'][size_key] < 0:
             product['sizes'][size_key] = 0
@@ -914,7 +1054,6 @@ def create_sale():
         product['totalStock'] = total_stock
         product['lastUpdated'] = datetime.now().isoformat()
         
-        # Update product in list
         data_store.products[product_index] = product
         data_store.save_products()
         
@@ -1068,13 +1207,16 @@ def health_check():
     except Exception as e:
         return jsonify({'status': 'degraded', 'error': str(e)}), 200
 
-# ==================== STATIC PAGE ROUTES ====================
+# ==================== STATIC PAGE ROUTES - FIXED FOR REFRESH LOOP ====================
 @app.route('/')
 def index():
-    """Serve index.html"""
+    """Serve index.html with proper caching headers to prevent refresh loop"""
     try:
         if os.path.exists('index.html'):
-            return send_file('index.html')
+            response = make_response(send_file('index.html'))
+            response.headers['Cache-Control'] = 'public, max-age=3600'
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            return response
         else:
             return jsonify({
                 'message': 'Karanja Shoe Store API is running',
@@ -1088,10 +1230,10 @@ def index():
         logger.error(f"Error serving index: {e}")
         return jsonify({'error': 'Could not load index.html'}), 500
 
-# ==================== CATCH-ALL ROUTE ====================
+# ==================== CATCH-ALL ROUTE - FIXED FOR REFRESH LOOP ====================
 @app.route('/<path:path>')
 def catch_all(path):
-    """Serve index.html for all non-API routes"""
+    """Serve index.html for all non-API routes with proper headers"""
     if path.startswith('api/'):
         return jsonify({'error': 'API endpoint not found'}), 404
     if path.startswith('static/'):
@@ -1099,7 +1241,10 @@ def catch_all(path):
     
     try:
         if os.path.exists('index.html'):
-            return send_file('index.html')
+            response = make_response(send_file('index.html'))
+            response.headers['Cache-Control'] = 'public, max-age=3600'
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            return response
     except Exception as e:
         logger.error(f"Error serving index for path {path}: {e}")
     
@@ -1114,7 +1259,9 @@ def not_found(e):
         return jsonify({'error': 'Static file not found'}), 404
     try:
         if os.path.exists('index.html'):
-            return send_file('index.html')
+            response = make_response(send_file('index.html'))
+            response.headers['Cache-Control'] = 'public, max-age=3600'
+            return response
     except:
         pass
     return jsonify({'error': 'Page not found'}), 404
@@ -1135,7 +1282,6 @@ def init_sample_data():
     """Initialize sample data if no products exist"""
     try:
         if len(data_store.products) == 0:
-            # Create placeholder image
             placeholder_path = os.path.join('static', 'placeholder.png')
             if not os.path.exists(placeholder_path):
                 os.makedirs('static', exist_ok=True)
@@ -1181,4 +1327,4 @@ if __name__ == '__main__':
     logger.info("✓ CROSS-DEVICE SYNC ENABLED - Data is the same on phone, tablet, and PC")
     logger.info("=" * 70)
     
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)  # Set debug=False for production
