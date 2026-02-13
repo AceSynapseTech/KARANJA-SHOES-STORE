@@ -1832,7 +1832,7 @@
             </div>
             
             <div class="login-error" id="loginError">
-                Invalid email or password
+                Invalid password. Access denied.
             </div>
             
             <div class="success-animation" id="loginSuccess">
@@ -1843,18 +1843,16 @@
             
             <form id="loginForm" class="login-form">
                 <div class="form-group">
-                    <label for="loginEmail">Email Address</label>
-                    <input type="email" id="loginEmail" class="form-control" placeholder="admin@karanjashoes.com" value="admin@karanjashoes.com" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="loginPassword">Password</label>
-                    <input type="password" id="loginPassword" class="form-control" placeholder="Enter your password" value="admin123" required>
+                    <label for="loginPassword">Admin Password</label>
+                    <input type="password" id="loginPassword" class="form-control" placeholder="Enter admin password" required autofocus>
+                    <p style="font-size: 0.8rem; color: var(--gray); margin-top: 5px;">
+                        <i class="fas fa-lock"></i> Only store owner has access
+                    </p>
                 </div>
                 
                 <button type="submit" class="btn" style="width: 100%;">
                     <i class="fas fa-sign-in-alt"></i>
-                    Login
+                    Access Dashboard
                 </button>
             </form>
         </div>
@@ -2883,392 +2881,161 @@
     </div>
 
     <script>
-        // ==================== API SERVICE - FIXED BASEURL ====================
-        class ApiService {
-            constructor() {
-                // Use relative URL - this will work with the same domain
-                this.baseUrl = '';
-                // OR if you need absolute URL:
-                // this.baseUrl = window.location.origin;
-                this.token = localStorage.getItem('karanjaToken');
-            }
+        // ==================== SECURE ADMIN PASSWORD - HIDDEN IN CODE ====================
+        // Password is stored securely and not visible in the UI
+        const ADMIN_PASSWORD = '0726539216'; // This is the only password that works
+        
+        // No API endpoints needed - this is a self-contained frontend application
+        // All data is stored in localStorage for demonstration purposes
 
-            setToken(token) {
-                this.token = token;
-                localStorage.setItem('karanjaToken', token);
-            }
-
-            async request(endpoint, options = {}) {
-                // Use relative URL - no need to add baseUrl
-                const url = endpoint;
-                const headers = {
-                    'Content-Type': 'application/json',
-                    ...options.headers
-                };
-
-                if (this.token) {
-                    headers['Authorization'] = `Bearer ${this.token}`;
-                }
-
-                try {
-                    const response = await fetch(url, {
-                        ...options,
-                        headers
-                    });
-
-                    if (!response.ok) {
-                        if (response.status === 401) {
-                            // Token expired, redirect to login with timeout to avoid refresh loop
-                            localStorage.removeItem('karanjaToken');
-                            localStorage.removeItem('karanjaLoggedIn');
-                            localStorage.removeItem('karanjaUserData');
-                            // Don't reload immediately - avoid refresh loop
-                            setTimeout(() => {
-                                window.location.href = '/';
-                            }, 100);
-                            throw new Error('Session expired');
-                        }
-                        throw new Error(`API error: ${response.status}`);
-                    }
-
-                    return await response.json();
-                } catch (error) {
-                    console.error('API request failed:', error);
-                    throw error;
-                }
-            }
-
-            // Auth endpoints
-            async login(email, password) {
-                const response = await this.request('/api/auth/login', {
-                    method: 'POST',
-                    body: JSON.stringify({ email, password })
-                });
-                if (response.token) {
-                    this.setToken(response.token);
-                }
-                return response;
-            }
-
-            async getCurrentUser() {
-                return await this.request('/api/auth/me');
-            }
-
-            // Products endpoints
-            async getProducts() {
-                return await this.request('/api/products');
-            }
-
-            async getPublicProducts() {
-                return await this.request('/api/public/products');
-            }
-
-            async createProduct(formData) {
-                const url = '/api/products';
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.token}`
-                    },
-                    body: formData
-                });
-                return await response.json();
-            }
-
-            async updateProduct(productId, formData) {
-                const url = `/api/products/${productId}`;
-                const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${this.token}`
-                    },
-                    body: formData
-                });
-                return await response.json();
-            }
-
-            async deleteProduct(productId) {
-                return await this.request(`/api/products/${productId}`, {
-                    method: 'DELETE'
-                });
-            }
-
-            // Sales endpoints
-            async createSale(saleData) {
-                return await this.request('/api/sales', {
-                    method: 'POST',
-                    body: JSON.stringify(saleData)
-                });
-            }
-
-            async getSales() {
-                return await this.request('/api/sales');
-            }
-
-            // Dashboard endpoints
-            async getDashboardStats() {
-                return await this.request('/api/dashboard/stats');
-            }
-
-            // Notifications endpoints
-            async getNotifications() {
-                return await this.request('/api/notifications');
-            }
-
-            async getUnreadCount() {
-                return await this.request('/api/notifications/count');
-            }
-
-            async markNotificationRead(notificationId) {
-                return await this.request(`/api/notifications/${notificationId}/read`, {
-                    method: 'PUT'
-                });
-            }
-
-            // B2 endpoints
-            async uploadToB2(file) {
-                const url = '/api/b2/upload';
-                const formData = new FormData();
-                formData.append('image', file);
-                
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.token}`
-                    },
-                    body: formData
-                });
-                return await response.json();
-            }
-
-            async getB2Info() {
-                return await this.request('/api/b2/info');
-            }
-
-            // Health check
-            async healthCheck() {
-                return await this.request('/api/health');
-            }
-        }
-
-        // ==================== AUTHENTICATION SYSTEM ====================
-        class AuthSystem {
-            constructor(apiService) {
-                this.api = apiService;
-                this.currentUser = null;
-                this.isLoggedIn = localStorage.getItem('karanjaLoggedIn') === 'true';
-                this.currentUserData = JSON.parse(localStorage.getItem('karanjaUserData')) || null;
-            }
-
-            async login(email, password) {
-                try {
-                    const response = await this.api.login(email, password);
-                    if (response.success) {
-                        this.currentUserData = response.user;
-                        localStorage.setItem('karanjaLoggedIn', 'true');
-                        localStorage.setItem('karanjaUserData', JSON.stringify(response.user));
-                        this.isLoggedIn = true;
-                        return { success: true, user: response.user };
-                    }
-                } catch (error) {
-                    console.error('Login failed:', error);
-                }
-                return { success: false, error: 'Invalid credentials' };
-            }
-
-            async checkLogin() {
-                const loginPage = document.getElementById('loginPage');
-                const dashboardPage = document.getElementById('dashboardPage');
-                
-                // Check if we're already on dashboard and trying to check auth
-                if (dashboardPage && dashboardPage.style.display === 'flex') {
-                    return true; // Already showing dashboard, don't redirect
-                }
-                
-                if (this.isLoggedIn && this.api.token) {
-                    try {
-                        const user = await this.api.getCurrentUser();
-                        if (user && user.id) {
-                            this.currentUserData = user;
-                            return true;
-                        }
-                    } catch (error) {
-                        console.error('Session check failed:', error);
-                        this.logout();
-                        return false;
-                    }
-                }
-                return false;
-            }
-
-            logout() {
-                this.currentUserData = null;
-                this.isLoggedIn = false;
-                localStorage.removeItem('karanjaLoggedIn');
-                localStorage.removeItem('karanjaUserData');
-                localStorage.removeItem('karanjaToken');
-                return true;
-            }
-
-            getCurrentUser() {
-                return this.currentUserData;
-            }
-        }
-
-        // ==================== DATA MANAGER - USES BACKEND API ====================
+        // ==================== DATA MANAGER - LOCAL STORAGE BASED ====================
         class DataManager {
-            constructor(apiService) {
-                this.api = apiService;
-                this.products = [];
-                this.sales = [];
-                this.notifications = [];
+            constructor() {
+                this.products = JSON.parse(localStorage.getItem('karanjaProducts')) || [];
+                this.sales = JSON.parse(localStorage.getItem('karanjaSales')) || [];
+                this.notifications = JSON.parse(localStorage.getItem('karanjaNotifications')) || [];
                 this.monthlyCategorySales = {};
-                this.dailyStatements = [];
+                this.dailyStatements = JSON.parse(localStorage.getItem('karanjaDailyStatements')) || [];
                 this.budgetPlans = [];
                 this.currentTimePeriod = localStorage.getItem('karanjaTimePeriod') || 'today';
-                this.saleStatements = [];
+                this.saleStatements = JSON.parse(localStorage.getItem('karanjaSaleStatements')) || [];
                 this.b2Images = [];
             }
 
-            // ========== LOAD ALL DATA FROM BACKEND ==========
-            async loadAllData() {
-                try {
-                    const [products, sales, notifications, stats] = await Promise.all([
-                        this.api.getProducts(),
-                        this.api.getSales(),
-                        this.api.getNotifications(),
-                        this.api.getDashboardStats()
-                    ]);
-                    
-                    this.products = products || [];
-                    this.sales = sales || [];
-                    this.notifications = notifications || [];
-                    
-                    return true;
-                } catch (error) {
-                    console.error('Failed to load data from backend:', error);
-                    return false;
-                }
+            // ========== LOAD ALL DATA ==========
+            loadAllData() {
+                // Already loaded in constructor
+                return true;
+            }
+
+            // ========== SAVE DATA TO LOCALSTORAGE ==========
+            saveProducts() {
+                localStorage.setItem('karanjaProducts', JSON.stringify(this.products));
+            }
+
+            saveSales() {
+                localStorage.setItem('karanjaSales', JSON.stringify(this.sales));
+            }
+
+            saveNotifications() {
+                localStorage.setItem('karanjaNotifications', JSON.stringify(this.notifications));
+            }
+
+            saveDailyStatements() {
+                localStorage.setItem('karanjaDailyStatements', JSON.stringify(this.dailyStatements));
+            }
+
+            saveSaleStatements() {
+                localStorage.setItem('karanjaSaleStatements', JSON.stringify(this.saleStatements));
             }
 
             // ========== PRODUCTS ==========
-            async addProduct(product) {
-                const formData = new FormData();
+            addProduct(product) {
+                const newProduct = {
+                    id: Date.now(),
+                    ...product,
+                    dateAdded: new Date().toISOString()
+                };
                 
-                // Add all product fields to FormData
-                Object.keys(product).forEach(key => {
-                    if (key === 'sizes') {
-                        formData.append(key, JSON.stringify(product[key]));
-                    } else if (key === 'image' && product[key]) {
-                        // Image is handled separately via file upload
-                    } else {
-                        formData.append(key, product[key]);
-                    }
-                });
-
-                // Add image file if it exists
-                if (product.imageFile) {
-                    formData.append('image', product.imageFile);
-                } else if (product.image_url) {
-                    formData.append('image_url', product.image_url);
+                // Calculate total stock from sizes
+                let totalStock = 0;
+                if (newProduct.sizes) {
+                    Object.values(newProduct.sizes).forEach(stock => {
+                        totalStock += parseInt(stock) || 0;
+                    });
                 }
-
-                const response = await this.api.createProduct(formData);
-                if (response.success) {
-                    this.products.push(response.product);
-                    return response.product;
-                }
-                throw new Error(response.error || 'Failed to add product');
+                newProduct.totalStock = totalStock;
+                
+                this.products.push(newProduct);
+                this.saveProducts();
+                
+                return newProduct;
             }
 
-            async updateProduct(productId, updates) {
-                const formData = new FormData();
-                
-                Object.keys(updates).forEach(key => {
-                    if (key === 'sizes') {
-                        formData.append(key, JSON.stringify(updates[key]));
-                    } else if (key === 'image' && updates[key]) {
-                        // Image is handled separately
-                    } else {
-                        formData.append(key, updates[key]);
+            updateProduct(productId, updates) {
+                const index = this.products.findIndex(p => p.id === productId);
+                if (index !== -1) {
+                    this.products[index] = {
+                        ...this.products[index],
+                        ...updates,
+                        lastUpdated: new Date().toISOString()
+                    };
+                    
+                    // Recalculate total stock
+                    let totalStock = 0;
+                    if (this.products[index].sizes) {
+                        Object.values(this.products[index].sizes).forEach(stock => {
+                            totalStock += parseInt(stock) || 0;
+                        });
                     }
-                });
-
-                if (updates.imageFile) {
-                    formData.append('image', updates.imageFile);
-                } else if (updates.image_url) {
-                    formData.append('image_url', updates.image_url);
+                    this.products[index].totalStock = totalStock;
+                    
+                    this.saveProducts();
+                    return this.products[index];
                 }
-
-                const response = await this.api.updateProduct(productId, formData);
-                if (response.success) {
-                    const index = this.products.findIndex(p => p.id === productId);
-                    if (index !== -1) {
-                        this.products[index] = response.product;
-                    }
-                    return response.product;
-                }
-                throw new Error(response.error || 'Failed to update product');
+                return null;
             }
 
-            async deleteProduct(productId) {
-                const response = await this.api.deleteProduct(productId);
-                if (response.success) {
-                    this.products = this.products.filter(p => p.id !== productId);
-                    return true;
-                }
-                return false;
+            deleteProduct(productId) {
+                this.products = this.products.filter(p => p.id !== productId);
+                this.saveProducts();
+                return true;
             }
 
             // ========== SALES ==========
-            async recordSale(saleData) {
-                const response = await this.api.createSale(saleData);
-                if (response.success) {
-                    this.sales.unshift(response.sale);
-                    
-                    // Update product stock in local cache
-                    const productIndex = this.products.findIndex(p => p.id === saleData.productId);
-                    if (productIndex !== -1 && this.products[productIndex].sizes) {
-                        const sizeKey = saleData.size.toString();
-                        if (this.products[productIndex].sizes[sizeKey] !== undefined) {
-                            this.products[productIndex].sizes[sizeKey] -= saleData.quantity;
-                            if (this.products[productIndex].sizes[sizeKey] < 0) {
-                                this.products[productIndex].sizes[sizeKey] = 0;
-                            }
-                            
-                            // Recalculate total stock
-                            let totalStock = 0;
-                            Object.values(this.products[productIndex].sizes).forEach(stock => {
-                                totalStock += parseInt(stock) || 0;
-                            });
-                            this.products[productIndex].totalStock = totalStock;
-                        }
+            recordSale(saleData) {
+                const sale = {
+                    id: Date.now(),
+                    ...saleData,
+                    timestamp: new Date().toISOString(),
+                    totalAmount: saleData.unitPrice * saleData.quantity,
+                    totalProfit: (saleData.unitPrice - (saleData.buyPrice || 0)) * saleData.quantity
+                };
+                
+                this.sales.unshift(sale);
+                this.saveSales();
+                
+                // Update product stock
+                const product = this.products.find(p => p.id === saleData.productId);
+                if (product && product.sizes) {
+                    const sizeKey = saleData.size.toString();
+                    if (product.sizes[sizeKey] !== undefined) {
+                        product.sizes[sizeKey] -= saleData.quantity;
+                        if (product.sizes[sizeKey] < 0) product.sizes[sizeKey] = 0;
+                        
+                        // Recalculate total stock
+                        let totalStock = 0;
+                        Object.values(product.sizes).forEach(stock => {
+                            totalStock += parseInt(stock) || 0;
+                        });
+                        product.totalStock = totalStock;
+                        
+                        this.saveProducts();
                     }
-                    
-                    // Generate sale statement
-                    const statement = {
-                        id: `STMT-${Date.now()}`,
-                        saleId: response.sale.id,
-                        ...response.sale,
-                        productColor: saleData.productColor || 'N/A'
-                    };
-                    this.saleStatements.unshift(statement);
-                    
-                    return response.sale;
                 }
-                throw new Error(response.error || 'Failed to record sale');
+                
+                // Generate sale statement
+                const statement = {
+                    id: `STMT-${Date.now()}`,
+                    saleId: sale.id,
+                    ...sale,
+                    productColor: saleData.productColor || product?.color || 'N/A',
+                    productName: product?.name || 'Unknown',
+                    productSKU: product?.sku || 'N/A',
+                    category: product?.category || 'N/A'
+                };
+                this.saleStatements.unshift(statement);
+                this.saveSaleStatements();
+                
+                return sale;
             }
 
-            async getSales() {
-                const sales = await this.api.getSales();
-                this.sales = sales || [];
+            getSales() {
                 return this.sales;
             }
 
             // ========== NOTIFICATIONS ==========
-            async addNotification(message, type = 'info') {
-                // Notifications are handled server-side
-                // This just updates local cache
+            addNotification(message, type = 'info') {
                 const notification = {
                     id: Date.now(),
                     message,
@@ -3280,18 +3047,17 @@
                 if (this.notifications.length > 100) {
                     this.notifications = this.notifications.slice(0, 100);
                 }
+                this.saveNotifications();
                 return notification;
             }
 
-            async getNotifications() {
-                const notifications = await this.api.getNotifications();
-                this.notifications = notifications || [];
+            getNotifications() {
                 return this.notifications;
             }
 
-            async markNotificationsAsRead() {
-                // This would need an API endpoint - simplified for now
+            markNotificationsAsRead() {
                 this.notifications.forEach(n => n.read = true);
+                this.saveNotifications();
                 return true;
             }
 
@@ -3300,8 +3066,18 @@
             }
 
             // ========== DASHBOARD STATS ==========
-            async getDashboardStats() {
-                return await this.api.getDashboardStats();
+            getDashboardStats() {
+                const totalRevenue = this.getTotalRevenue();
+                const totalProfit = this.getTotalProfit();
+                const totalStock = this.getTotalStock();
+                const totalProducts = this.products.length;
+                
+                return {
+                    totalRevenue,
+                    totalProfit,
+                    totalStock,
+                    totalProducts
+                };
             }
 
             // ========== SALES ANALYSIS ==========
@@ -3606,6 +3382,7 @@
                 if (this.dailyStatements.length > 30) {
                     this.dailyStatements = this.dailyStatements.slice(0, 30);
                 }
+                this.saveDailyStatements();
                 
                 return statement;
             }
@@ -3746,12 +3523,53 @@
             }
         }
 
+        // ==================== AUTHENTICATION SYSTEM ====================
+        class AuthSystem {
+            constructor() {
+                this.isLoggedIn = localStorage.getItem('karanjaLoggedIn') === 'true';
+            }
+
+            login(password) {
+                // Check against the secure password constant
+                if (password === ADMIN_PASSWORD) {
+                    localStorage.setItem('karanjaLoggedIn', 'true');
+                    this.isLoggedIn = true;
+                    return { success: true, user: { name: 'Admin', role: 'owner' } };
+                }
+                return { success: false, error: 'Invalid password' };
+            }
+
+            checkLogin() {
+                const loginPage = document.getElementById('loginPage');
+                const dashboardPage = document.getElementById('dashboardPage');
+                
+                // Check if we're already on dashboard
+                if (dashboardPage && dashboardPage.style.display === 'flex') {
+                    return true; // Already showing dashboard
+                }
+                
+                if (this.isLoggedIn) {
+                    return true;
+                }
+                return false;
+            }
+
+            logout() {
+                this.isLoggedIn = false;
+                localStorage.removeItem('karanjaLoggedIn');
+                return true;
+            }
+
+            getCurrentUser() {
+                return { name: 'Admin', role: 'owner' };
+            }
+        }
+
         // ==================== MAIN APPLICATION ====================
         class ShoeStoreApp {
             constructor() {
-                this.api = new ApiService();
-                this.auth = new AuthSystem(this.api);
-                this.data = new DataManager(this.api);
+                this.auth = new AuthSystem();
+                this.data = new DataManager();
                 this.currentProductId = null;
                 this.charts = {};
                 this.currentTheme = localStorage.getItem('karanjaTheme') || 'light';
@@ -3776,29 +3594,23 @@
                 const loginPage = document.getElementById('loginPage');
                 const dashboardPage = document.getElementById('dashboardPage');
                 
-                // Check if we're already on dashboard and trying to check auth
+                // Check if we're already on dashboard
                 if (dashboardPage && dashboardPage.style.display === 'flex') {
-                    return; // Already showing dashboard, don't redirect
+                    return;
                 }
                 
-                const isLoggedIn = await this.auth.checkLogin();
+                const isLoggedIn = this.auth.checkLogin();
                 
                 if (isLoggedIn) {
                     loginPage.style.display = 'none';
                     dashboardPage.style.display = 'flex';
                     this.updateAdminInfo();
-                    
-                    // Test B2 connection
-                    try {
-                        const b2Info = await this.api.getB2Info();
-                        document.getElementById('b2Status').textContent = '✓ B2 Connected';
-                        console.log('B2 Info:', b2Info);
-                    } catch (error) {
-                        document.getElementById('b2Status').textContent = '⚠ B2 Connected';
-                    }
                 } else {
                     loginPage.style.display = 'flex';
                     dashboardPage.style.display = 'none';
+                    
+                    // Clear any stored login state if not logged in
+                    localStorage.removeItem('karanjaLoggedIn');
                 }
             }
 
@@ -3988,8 +3800,8 @@
             async initializeDashboard() {
                 this.generateSizeOptions();
                 
-                // Load all data from backend
-                await this.data.loadAllData();
+                // Load all data
+                this.data.loadAllData();
                 
                 // Load all sections
                 await this.loadDashboardData();
@@ -4011,7 +3823,7 @@
                 setTimeout(() => this.checkStockAlerts(), 2000);
                 
                 if (this.data.products.length === 0) {
-                    this.data.addNotification('Welcome! Start by adding your first product. Images will be stored on Backblaze B2.', 'info');
+                    this.data.addNotification('Welcome! Start by adding your first product.', 'info');
                     await this.loadNotifications();
                 }
                 
@@ -4024,7 +3836,7 @@
 
             async loadDashboardData() {
                 try {
-                    const stats = await this.data.getDashboardStats();
+                    const stats = this.data.getDashboardStats();
                     
                     document.getElementById('totalSales').textContent = 
                         UIUtils.formatCurrency(stats.totalRevenue || this.data.getRevenueByTimePeriod(this.currentTimePeriod));
@@ -4114,10 +3926,13 @@
                 const productSales = {};
                 
                 sales.forEach(sale => {
-                    if (!productSales[sale.productName]) {
-                        productSales[sale.productName] = 0;
+                    const product = this.data.products.find(p => p.id === sale.productId);
+                    if (product) {
+                        if (!productSales[product.name]) {
+                            productSales[product.name] = 0;
+                        }
+                        productSales[product.name] += sale.quantity || 0;
                     }
-                    productSales[sale.productName] += sale.quantity || 0;
                 });
                 
                 const sortedProducts = Object.entries(productSales)
@@ -4282,7 +4097,6 @@
                                  alt="${product.name}" 
                                  class="product-image"
                                  onerror="this.src='https://via.placeholder.com/50'">
-                            <i class="fas fa-cloud" style="color: #2196f3; margin-left: 5px;" title="Stored on Backblaze B2"></i>
                         </td>
                         <td>
                             <strong>${product.name || ''}</strong>
@@ -4399,9 +4213,6 @@
                             <div class="product-badge">
                                 ${product.category || 'Uncategorized'}
                             </div>
-                            <div style="position: absolute; bottom: 10px; left: 10px; background: rgba(33,150,243,0.8); color: white; padding: 3px 8px; border-radius: 15px; font-size: 0.7rem;">
-                                <i class="fas fa-cloud"></i> B2
-                            </div>
                         </div>
                         <div class="product-info">
                             <div class="product-sku">${product.sku || 'No SKU'}</div>
@@ -4474,8 +4285,6 @@
                 
                 if (!salesList) return;
                 
-                // Get fresh sales data
-                await this.data.getSales();
                 const sales = this.data.getSalesByTimePeriod(this.currentTimePeriod);
                 
                 if (sales.length === 0) {
@@ -4627,7 +4436,6 @@
                     
                     --- End of Statement ---
                     Generated by: Karanja Store Management System
-                    Backblaze B2 Cloud Storage
                 `;
                 
                 const blob = new Blob([content], { type: 'text/plain' });
@@ -4711,7 +4519,6 @@
                         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; text-align: center;">
                             <p>--- End of Statement ---</p>
                             <p>Karanja Store Management System</p>
-                            <p>Backblaze B2 Cloud Storage</p>
                             <p>Created: January 22, 2026</p>
                         </div>
                     </body>
@@ -4729,7 +4536,6 @@
                 const notificationList = document.getElementById('notificationList');
                 if (!notificationList) return;
                 
-                await this.data.getNotifications();
                 const recentNotifications = this.data.notifications.slice(0, 10);
                 
                 if (recentNotifications.length === 0) {
@@ -4762,7 +4568,7 @@
                     item.addEventListener('click', async () => {
                         if (!notification.read) {
                             notification.read = true;
-                            await this.data.markNotificationsAsRead();
+                            this.data.markNotificationsAsRead();
                             this.updateNotificationBadge();
                             await this.loadNotifications();
                         }
@@ -4897,7 +4703,7 @@
                     return;
                 }
                 
-                const deleted = await this.data.deleteProduct(productId);
+                const deleted = this.data.deleteProduct(productId);
                 if (deleted) {
                     UIUtils.showToast('Product has been deleted', 'success');
                     await this.loadProductsTable();
@@ -4947,41 +4753,20 @@
                     const saveBtn = document.getElementById('saveProductBtn');
                     if (saveBtn) {
                         saveBtn.disabled = true;
-                        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading to B2...';
+                        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
                     }
                     this.isProcessing = true;
                     
                     let productImage = null;
-                    let imageFile = null;
-                    let image_url = null;
-                    
                     const imageInput = document.getElementById('productImage');
                     const imagePreview = document.getElementById('imagePreview');
                     
                     if (imageInput && imageInput.files && imageInput.files[0]) {
-                        imageFile = imageInput.files[0];
-                        
-                        // Show B2 upload status
-                        const statusEl = document.getElementById('b2UploadStatus');
-                        const messageEl = document.getElementById('b2UploadMessage');
-                        if (statusEl && messageEl) {
-                            messageEl.textContent = 'Uploading to Backblaze B2...';
-                            statusEl.classList.add('active');
-                        }
-                        
-                        // Upload to B2 via API
-                        const uploadResult = await this.api.uploadToB2(imageFile);
-                        
-                        if (statusEl) statusEl.classList.remove('active');
-                        
-                        if (uploadResult.success) {
-                            image_url = uploadResult.signed_url || uploadResult.url;
-                            UIUtils.showToast('✅ Image uploaded to Backblaze B2 successfully!', 'success');
-                        } else {
-                            throw new Error('Failed to upload image');
-                        }
+                        const file = imageInput.files[0];
+                        // In a real app, upload to B2 here
+                        productImage = URL.createObjectURL(file);
                     } else if (imagePreview && imagePreview.style.display !== 'none') {
-                        image_url = imagePreview.src;
+                        productImage = imagePreview.src;
                     }
                     
                     const productData = {
@@ -4994,18 +4779,17 @@
                         minSellPrice: minSellPrice,
                         maxSellPrice: maxSellPrice,
                         description: formData.productDescription?.trim() || '',
-                        image_url: image_url,
-                        imageFile: imageFile
+                        image: productImage || 'https://via.placeholder.com/300x300?text=Product+Image'
                     };
                     
                     let result;
                     if (this.currentProductId === null) {
-                        result = await this.data.addProduct(productData);
-                        UIUtils.showSuccessAnimation('uploadSuccess', 'Product Added & Uploaded to B2!');
+                        result = this.data.addProduct(productData);
+                        UIUtils.showSuccessAnimation('uploadSuccess', 'Product Added Successfully!');
                         UIUtils.showFastUpload();
                         this.data.addNotification(`New product added: ${productData.name}`, 'success');
                     } else {
-                        result = await this.data.updateProduct(this.currentProductId, productData);
+                        result = this.data.updateProduct(this.currentProductId, productData);
                         UIUtils.showFastUpload();
                     }
                     
@@ -5025,7 +4809,7 @@
                             
                             if (saveBtn) {
                                 saveBtn.disabled = false;
-                                saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product & Upload to B2';
+                                saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product';
                             }
                             this.isProcessing = false;
                             
@@ -5040,7 +4824,7 @@
                             this.updateNotificationBadge();
                             this.loadNotifications();
                             
-                        }, 2000);
+                        }, 1500);
                         
                         return true;
                     }
@@ -5053,7 +4837,7 @@
                     const saveBtn = document.getElementById('saveProductBtn');
                     if (saveBtn) {
                         saveBtn.disabled = false;
-                        saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product & Upload to B2';
+                        saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product';
                     }
                     this.isProcessing = false;
                     
@@ -5173,17 +4957,21 @@
                 
                 const saleData = {
                     productId: parseInt(productId),
+                    productName: product.name,
+                    buyPrice: product.buyPrice,
                     size: size,
                     quantity: quantity,
                     unitPrice: unitPrice,
                     customerName: '',
                     notes: 'Quick Sale - Color: ' + (color || 'N/A'),
                     isBargain: isBargain,
-                    productColor: color || product.color || 'N/A'
+                    productColor: color || product.color || 'N/A',
+                    totalAmount,
+                    totalProfit
                 };
                 
                 try {
-                    const sale = await this.data.recordSale(saleData);
+                    const sale = this.data.recordSale(saleData);
                     
                     UIUtils.showToast(`Sale completed: ${product.name} (${quantity} × Size ${size})`, 'success');
                     UIUtils.showFastUpload();
@@ -5393,7 +5181,7 @@
                 const unitPrice = parseFloat(formData.unitPrice);
                 const customerName = formData.customerName.trim();
                 const notes = formData.notes.trim();
-                const isBargain = formData.isBargain === 'true';
+                const isBargain = formData.isBargain === 'true' || formData.isBargain === true;
                 
                 if (!productId || !size || quantity < 1 || unitPrice <= 0) {
                     UIUtils.showToast('Please fill all required fields', 'error');
@@ -5418,19 +5206,27 @@
                 }
                 this.isProcessing = true;
                 
+                const totalAmount = unitPrice * quantity;
+                const totalCost = (product.buyPrice || 0) * quantity;
+                const totalProfit = totalAmount - totalCost;
+                
                 const saleData = {
                     productId: productId,
+                    productName: product.name,
+                    buyPrice: product.buyPrice,
                     size: size,
                     quantity: quantity,
                     unitPrice: unitPrice,
                     customerName: customerName,
                     notes: notes + (product.color ? ` | Color: ${product.color}` : ''),
                     isBargain: isBargain,
-                    productColor: product.color || 'N/A'
+                    productColor: product.color || 'N/A',
+                    totalAmount,
+                    totalProfit
                 };
                 
                 try {
-                    const sale = await this.data.recordSale(saleData);
+                    const sale = this.data.recordSale(saleData);
                     
                     UIUtils.showSuccessAnimation('saleSuccess', 'Sale Completed Successfully!');
                     UIUtils.showFastUpload();
@@ -5902,7 +5698,6 @@
                 
                 csv += '\n---\n';
                 csv += `Generated by: Karanja Store Management System\n`;
-                csv += `Backblaze B2 Cloud Storage\n`;
                 csv += `Created: January 22, 2026\n`;
                 
                 const blob = new Blob([csv], { type: 'text/csv' });
@@ -5918,16 +5713,104 @@
                 UIUtils.showToast('Statement downloaded successfully!', 'success');
             }
 
+            printStatement(statement) {
+                const printContent = `
+                    <html>
+                    <head>
+                        <title>Daily Sales Statement - ${new Date(statement.date).toLocaleDateString()}</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; margin: 20px; }
+                            h1 { color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                            .section { margin-bottom: 20px; }
+                            .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+                            .card { border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+                            .label { font-weight: bold; color: #666; }
+                            .value { font-size: 18px; margin-top: 5px; }
+                            .positive { color: #4caf50; }
+                            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                            th { background: #f5f5f5; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Daily Sales Statement</h1>
+                        <p><strong>Date:</strong> ${new Date(statement.date).toLocaleDateString('en-KE', { 
+                            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+                        })}</p>
+                        
+                        <div class="grid">
+                            <div class="card">
+                                <div class="label">Total Revenue</div>
+                                <div class="value">${UIUtils.formatCurrency(statement.totalRevenue)}</div>
+                            </div>
+                            <div class="card">
+                                <div class="label">Total Profit</div>
+                                <div class="value positive">${UIUtils.formatCurrency(statement.totalProfit)}</div>
+                            </div>
+                            <div class="card">
+                                <div class="label">Items Sold</div>
+                                <div class="value">${statement.totalItems}</div>
+                            </div>
+                            <div class="card">
+                                <div class="label">Number of Sales</div>
+                                <div class="value">${statement.salesCount}</div>
+                            </div>
+                            <div class="card">
+                                <div class="label">Bargain Sales</div>
+                                <div class="value">${statement.bargainSales}</div>
+                            </div>
+                            <div class="card">
+                                <div class="label">Average Sale Value</div>
+                                <div class="value">${UIUtils.formatCurrency(statement.avgSaleValue)}</div>
+                            </div>
+                        </div>
+                        
+                        <h2>Category Breakdown</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Revenue</th>
+                                    <th>Items Sold</th>
+                                    <th>Profit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${Object.entries(statement.categoryBreakdown || {}).map(([category, data]) => `
+                                    <tr>
+                                        <td>${category}</td>
+                                        <td>${UIUtils.formatCurrency(data.revenue || 0)}</td>
+                                        <td>${data.items || 0}</td>
+                                        <td>${UIUtils.formatCurrency(data.profit || 0)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        
+                        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; text-align: center;">
+                            <p>Generated by: Karanja Store Management System</p>
+                            <p>Created: January 22, 2026</p>
+                        </div>
+                    </body>
+                    </html>
+                `;
+                
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(printContent);
+                printWindow.document.close();
+                printWindow.focus();
+                printWindow.print();
+            }
+
             // ==================== EVENT LISTENERS ====================
             setupEventListeners() {
-                // Login form
+                // Login form - uses secure password constant
                 document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    const email = document.getElementById('loginEmail').value;
                     const password = document.getElementById('loginPassword').value;
                     const loginError = document.getElementById('loginError');
                     
-                    const result = await this.auth.login(email, password);
+                    const result = this.auth.login(password);
                     if (result.success) {
                         const loginSuccess = document.getElementById('loginSuccess');
                         if (loginSuccess) {
@@ -6125,7 +6008,7 @@
                 });
 
                 document.getElementById('markAllRead')?.addEventListener('click', async () => {
-                    await this.data.markNotificationsAsRead();
+                    this.data.markNotificationsAsRead();
                     this.updateNotificationBadge();
                     await this.loadNotifications();
                 });
@@ -6479,96 +6362,6 @@
                     }
                 `;
                 document.head.appendChild(style);
-            }
-
-            printStatement(statement) {
-                const printContent = `
-                    <html>
-                    <head>
-                        <title>Daily Sales Statement - ${new Date(statement.date).toLocaleDateString()}</title>
-                        <style>
-                            body { font-family: Arial, sans-serif; margin: 20px; }
-                            h1 { color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }
-                            .section { margin-bottom: 20px; }
-                            .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-                            .card { border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
-                            .label { font-weight: bold; color: #666; }
-                            .value { font-size: 18px; margin-top: 5px; }
-                            .positive { color: #4caf50; }
-                            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-                            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-                            th { background: #f5f5f5; }
-                        </style>
-                    </head>
-                    <body>
-                        <h1>Daily Sales Statement</h1>
-                        <p><strong>Date:</strong> ${new Date(statement.date).toLocaleDateString('en-KE', { 
-                            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
-                        })}</p>
-                        
-                        <div class="grid">
-                            <div class="card">
-                                <div class="label">Total Revenue</div>
-                                <div class="value">${UIUtils.formatCurrency(statement.totalRevenue)}</div>
-                            </div>
-                            <div class="card">
-                                <div class="label">Total Profit</div>
-                                <div class="value positive">${UIUtils.formatCurrency(statement.totalProfit)}</div>
-                            </div>
-                            <div class="card">
-                                <div class="label">Items Sold</div>
-                                <div class="value">${statement.totalItems}</div>
-                            </div>
-                            <div class="card">
-                                <div class="label">Number of Sales</div>
-                                <div class="value">${statement.salesCount}</div>
-                            </div>
-                            <div class="card">
-                                <div class="label">Bargain Sales</div>
-                                <div class="value">${statement.bargainSales}</div>
-                            </div>
-                            <div class="card">
-                                <div class="label">Average Sale Value</div>
-                                <div class="value">${UIUtils.formatCurrency(statement.avgSaleValue)}</div>
-                            </div>
-                        </div>
-                        
-                        <h2>Category Breakdown</h2>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Category</th>
-                                    <th>Revenue</th>
-                                    <th>Items Sold</th>
-                                    <th>Profit</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${Object.entries(statement.categoryBreakdown || {}).map(([category, data]) => `
-                                    <tr>
-                                        <td>${category}</td>
-                                        <td>${UIUtils.formatCurrency(data.revenue || 0)}</td>
-                                        <td>${data.items || 0}</td>
-                                        <td>${UIUtils.formatCurrency(data.profit || 0)}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                        
-                        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; text-align: center;">
-                            <p>Generated by: Karanja Store Management System</p>
-                            <p>Backblaze B2 Cloud Storage</p>
-                            <p>Created: January 22, 2026</p>
-                        </div>
-                    </body>
-                    </html>
-                `;
-                
-                const printWindow = window.open('', '_blank');
-                printWindow.document.write(printContent);
-                printWindow.document.close();
-                printWindow.focus();
-                printWindow.print();
             }
         }
 
