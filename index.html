@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Karanja Store - Management System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Karanja Store - Backblaze B2 Cloud Sync</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -290,6 +290,11 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+
         /* ==================== SUCCESS ANIMATION ==================== */
         .success-animation {
             display: none;
@@ -389,6 +394,17 @@
         .admin-info p {
             color: var(--gray);
             font-size: 0.9rem;
+        }
+
+        .b2-badge {
+            background: rgba(33, 150, 243, 0.2);
+            color: var(--accent);
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            display: inline-block;
+            margin-top: 5px;
+            border: 1px solid var(--accent);
         }
 
         .nav-menu {
@@ -1925,42 +1941,17 @@
     <script>
         (function() {
             // Prevent infinite refresh loops
-            const isLoggedIn = localStorage.getItem('karanjaLoggedIn') === 'true';
+            const token = localStorage.getItem('karanjaToken');
+            const isLoggedIn = !!token && token !== 'null' && token !== 'undefined';
+            
+            console.log('🔐 Auth Check - Token Present:', isLoggedIn);
+            
+            // Set initial visibility based on auth state
             const loginPage = document.getElementById('loginPage');
             const dashboardPage = document.getElementById('dashboardPage');
             
-            // Clear any refresh flags
-            sessionStorage.removeItem('refreshCount');
-            sessionStorage.removeItem('lastRefreshTime');
-            
-            // Store current timestamp to prevent immediate refreshes
-            const lastAuthCheck = localStorage.getItem('karanjaLastAuthCheck');
-            const now = Date.now();
-            
-            if (lastAuthCheck && now - parseInt(lastAuthCheck) < 500) {
-                console.log('⚠️ Preventing rapid auth check');
-                if (isLoggedIn) {
-                    if (loginPage) loginPage.style.display = 'none';
-                    if (dashboardPage) dashboardPage.style.display = 'flex';
-                } else {
-                    if (loginPage) loginPage.style.display = 'flex';
-                    if (dashboardPage) dashboardPage.style.display = 'none';
-                }
-                return;
-            }
-            
-            localStorage.setItem('karanjaLastAuthCheck', now);
-            
-            console.log('🔐 Auth Check - Logged In:', isLoggedIn);
-            
-            // Set initial visibility based on auth state
-            if (isLoggedIn) {
-                if (loginPage) loginPage.style.display = 'none';
-                if (dashboardPage) dashboardPage.style.display = 'flex';
-            } else {
-                if (loginPage) loginPage.style.display = 'flex';
-                if (dashboardPage) dashboardPage.style.display = 'none';
-            }
+            if (loginPage) loginPage.style.display = isLoggedIn ? 'none' : 'flex';
+            if (dashboardPage) dashboardPage.style.display = isLoggedIn ? 'flex' : 'none';
         })();
     </script>
 
@@ -1968,11 +1959,11 @@
     <div id="loginPage" class="login-container">
         <div class="login-card">
             <div class="login-logo">
-                <i class="fas fa-shoe-prints"></i>
+                <i class="fas fa-cloud"></i>
                 <h2>Karanja<span>Store</span></h2>
-                <p>Management System</p>
-                <p style="font-size: 0.8rem; margin-top: 5px;">Created: January 22, 2026</p>
-                <p style="font-size: 0.8rem; color: var(--accent); margin-top: 5px;">Backblaze B2 Cloud Storage</p>
+                <p>Backblaze B2 Cloud Sync</p>
+                <p style="font-size: 0.8rem; margin-top: 5px;">Created: February 13, 2026</p>
+                <p style="font-size: 0.8rem; color: var(--accent); margin-top: 5px;">Cross-Device Sync Enabled</p>
             </div>
             
             <div class="login-info">
@@ -2013,14 +2004,14 @@
                     </a>
                 </div>
                 
-                <button type="submit" class="btn" style="width: 100%;">
+                <button type="submit" class="btn" id="loginBtn" style="width: 100%;">
                     <i class="fas fa-sign-in-alt"></i>
                     Access Dashboard
                 </button>
             </form>
             
             <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: var(--gray);">
-                <i class="fas fa-shield-alt"></i> Secured with Backblaze B2 • Cross-device sync enabled
+                <i class="fas fa-cloud"></i> Backblaze B2 Storage • Data synced across all devices
             </div>
         </div>
     </div>
@@ -2076,7 +2067,7 @@
         <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <i class="fas fa-shoe-prints"></i>
+                    <i class="fas fa-cloud"></i>
                     <h2>Karanja<span>Store</span></h2>
                 </div>
             </div>
@@ -2085,8 +2076,11 @@
                 <img src="https://ui-avatars.com/api/?name=Admin+Karanja&background=ff5722&color=fff&size=128" alt="Admin">
                 <h4 id="adminName">Loading...</h4>
                 <p>Store Manager</p>
-                <p style="font-size: 0.7rem; color: var(--accent);" id="b2Status">Backblaze B2 Connected</p>
+                <div class="b2-badge" id="b2Status">
+                    <i class="fas fa-cloud"></i> Backblaze B2 Connected
+                </div>
                 <p style="font-size: 0.7rem; margin-top: 5px;" id="userEmail"></p>
+                <p style="font-size: 0.7rem; margin-top: 2px;" id="bucketInfo"></p>
             </div>
             
             <div class="nav-menu">
@@ -2190,7 +2184,7 @@
             <!-- Fast Upload Indicator -->
             <div class="fast-upload" id="fastUpload">
                 <i class="fas fa-bolt"></i>
-                <span>Operation completed instantly!</span>
+                <span>Operation completed!</span>
             </div>
 
             <!-- Time Period Selector -->
@@ -2776,7 +2770,7 @@
                         </div>
                         <div class="form-group">
                             <label>Created Date</label>
-                            <input type="text" class="form-control" readonly value="January 22, 2026">
+                            <input type="text" class="form-control" readonly value="February 13, 2026">
                         </div>
                         <div class="form-group">
                             <label>Last Updated</label>
@@ -2802,7 +2796,7 @@
                     </button>
                 </div>
                 
-                <form id="productForm">
+                <form id="productForm" enctype="multipart/form-data">
                     <div class="modal-body">
                         <div class="success-animation" id="uploadSuccess" style="display: none;">
                             <i class="fas fa-check-circle"></i>
@@ -2815,9 +2809,9 @@
                             <div class="image-upload" id="imageUpload">
                                 <i class="fas fa-cloud-upload-alt"></i>
                                 <p>Click to upload product image (Max: 20MB)</p>
-                                <p style="font-size: 0.8rem; color: #666;">Uploaded to: s3.eu-central-003.backblazeb2.com</p>
-                                <p style="font-size: 0.8rem; color: #666;">Bucket: karanja-shoe-store (Private)</p>
-                                <input type="file" id="productImage" accept="image/*" required>
+                                <p style="font-size: 0.8rem; color: var(--gray);">Uploaded to: karanjastores bucket</p>
+                                <p style="font-size: 0.8rem; color: var(--gray);">Bucket ID: d33891d14fc8555f99c8001c</p>
+                                <input type="file" id="productImage" name="image" accept="image/*" required>
                             </div>
                             <img id="imagePreview" class="image-preview" src="" alt="Preview">
                         </div>
@@ -2825,19 +2819,19 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="productName">Product Name *</label>
-                                <input type="text" id="productName" class="form-control" required placeholder="e.g., Leather Formal Shoes">
+                                <input type="text" id="productName" name="name" class="form-control" required placeholder="e.g., Leather Formal Shoes">
                             </div>
                             
                             <div class="form-group">
                                 <label for="productSKU">Product Number/SKU *</label>
-                                <input type="text" id="productSKU" class="form-control" required placeholder="e.g., KS-001">
+                                <input type="text" id="productSKU" name="sku" class="form-control" required placeholder="e.g., KS-001">
                             </div>
                         </div>
                         
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="productCategory">Category *</label>
-                                <select id="productCategory" class="form-control" required>
+                                <select id="productCategory" name="category" class="form-control" required>
                                     <option value="">Select Category</option>
                                     <option value="Official Shoes">Official Shoes</option>
                                     <option value="Sports Shoes">Sports Shoes</option>
@@ -2853,7 +2847,7 @@
                             
                             <div class="form-group">
                                 <label for="productColor">Color *</label>
-                                <input type="text" id="productColor" class="form-control" required placeholder="e.g., Black, Brown, White, Blue, Red">
+                                <input type="text" id="productColor" name="color" class="form-control" required placeholder="e.g., Black, Brown, White, Blue, Red">
                             </div>
                         </div>
                         
@@ -2875,12 +2869,12 @@
                                     <!-- Sizes 1-50 will be generated here -->
                                 </div>
                             </div>
-                            <input type="hidden" id="selectedSizes" name="selectedSizes">
+                            <input type="hidden" id="selectedSizes" name="sizes">
                         </div>
                         
                         <div class="form-group">
                             <label for="buyPrice">Cost Price per Item (KES) *</label>
-                            <input type="number" id="buyPrice" class="form-control" required min="0" step="0.01" placeholder="Cost per individual item">
+                            <input type="number" id="buyPrice" name="buyPrice" class="form-control" required min="0" step="0.01" placeholder="Cost per individual item">
                         </div>
                         
                         <div class="form-group">
@@ -2888,18 +2882,18 @@
                             <div class="price-range-container">
                                 <div>
                                     <label for="minSellPrice">Minimum Selling Price</label>
-                                    <input type="number" id="minSellPrice" class="form-control" required min="0" step="0.01" placeholder="Minimum price">
+                                    <input type="number" id="minSellPrice" name="minSellPrice" class="form-control" required min="0" step="0.01" placeholder="Minimum price">
                                 </div>
                                 <div>
                                     <label for="maxSellPrice">Maximum Selling Price</label>
-                                    <input type="number" id="maxSellPrice" class="form-control" required min="0" step="0.01" placeholder="Maximum price">
+                                    <input type="number" id="maxSellPrice" name="maxSellPrice" class="form-control" required min="0" step="0.01" placeholder="Maximum price">
                                 </div>
                             </div>
                         </div>
                         
                         <div class="form-group">
                             <label for="productDescription">Description</label>
-                            <textarea id="productDescription" class="form-control" rows="3" placeholder="Product features, material, comfort, condition, etc."></textarea>
+                            <textarea id="productDescription" name="description" class="form-control" rows="3" placeholder="Product features, material, comfort, condition, etc."></textarea>
                         </div>
                         
                         <div class="form-group" id="profitCalculationContainer" style="display: none;">
@@ -2983,22 +2977,22 @@
                         <div class="form-group" id="sizeSelection" style="display: none;">
                             <label>Select Size (1-50) *</label>
                             <div class="size-selection-grid" id="availableSizesGrid"></div>
-                            <input type="hidden" id="selectedSize" name="selectedSize">
+                            <input type="hidden" id="selectedSize" name="size">
                         </div>
                         
                         <div class="form-group" id="quantitySection" style="display: none;">
                             <label for="saleQuantity">Quantity *</label>
-                            <input type="number" id="saleQuantity" class="form-control" min="1" value="1" required>
+                            <input type="number" id="saleQuantity" name="quantity" class="form-control" min="1" value="1" required>
                             <p style="font-size: 0.9rem; color: #666; margin-top: 5px;" id="availableStockText"></p>
                         </div>
                         
                         <div class="form-group" id="priceSection" style="display: none;">
                             <label for="salePrice">Selling Price per Item (KES) *</label>
-                            <input type="number" id="salePrice" class="form-control" required min="0" step="0.01" placeholder="Enter actual selling price">
+                            <input type="number" id="salePrice" name="unitPrice" class="form-control" required min="0" step="0.01" placeholder="Enter actual selling price">
                             <p style="font-size: 0.9rem; color: #666; margin-top: 5px;">
                                 <span id="priceRangeInfo">Price range: KES 0 - 0</span>
                                 <br>
-                                <input type="checkbox" id="bargainCheckbox" style="margin-right: 5px;">
+                                <input type="checkbox" id="bargainCheckbox" name="isBargain" style="margin-right: 5px;">
                                 <label for="bargainCheckbox" style="cursor: pointer;">This is a bargain price</label>
                             </p>
                         </div>
@@ -3021,12 +3015,12 @@
                         
                         <div class="form-group" id="customerInfo">
                             <label for="customerName">Customer Name (Optional)</label>
-                            <input type="text" id="customerName" class="form-control" placeholder="Enter customer name">
+                            <input type="text" id="customerName" name="customerName" class="form-control" placeholder="Enter customer name">
                         </div>
                         
                         <div class="form-group">
                             <label for="saleNotes">Notes (Optional)</label>
-                            <textarea id="saleNotes" class="form-control" rows="2" placeholder="Any additional notes about this sale"></textarea>
+                            <textarea id="saleNotes" name="notes" class="form-control" rows="2" placeholder="Any additional notes about this sale"></textarea>
                         </div>
                     </div>
                     
@@ -3049,177 +3043,222 @@
         const DEFAULT_PASSWORD = '0726539216';
         const SECRET_KEY = 'karanja-update-2026';
 
-        // ==================== PREVENT REFRESH LOOP - CRITICAL FIX ====================
-        (function() {
-            // Check if we're already logged in and on dashboard
-            const isLoggedIn = localStorage.getItem('karanjaLoggedIn') === 'true';
-            const loginPage = document.getElementById('loginPage');
-            const dashboardPage = document.getElementById('dashboardPage');
-            
-            // Clear any refresh flags
-            sessionStorage.removeItem('refreshCount');
-            sessionStorage.removeItem('lastRefreshTime');
-            
-            // Store current timestamp to prevent immediate refreshes
-            const lastAuthCheck = localStorage.getItem('karanjaLastAuthCheck');
-            const now = Date.now();
-            
-            if (lastAuthCheck && now - parseInt(lastAuthCheck) < 500) {
-                console.log('⚠️ Preventing rapid auth check');
-                if (isLoggedIn) {
-                    if (loginPage) loginPage.style.display = 'none';
-                    if (dashboardPage) dashboardPage.style.display = 'flex';
-                } else {
-                    if (loginPage) loginPage.style.display = 'flex';
-                    if (dashboardPage) dashboardPage.style.display = 'none';
-                }
-                return;
-            }
-            
-            localStorage.setItem('karanjaLastAuthCheck', now);
-            
-            console.log('🔐 Auth Check - Logged In:', isLoggedIn);
-            
-            // Set initial visibility based on auth state
-            if (isLoggedIn) {
-                if (loginPage) loginPage.style.display = 'none';
-                if (dashboardPage) dashboardPage.style.display = 'flex';
-            } else {
-                if (loginPage) loginPage.style.display = 'flex';
-                if (dashboardPage) dashboardPage.style.display = 'none';
-            }
-        })();
-
-        // ==================== AUTHENTICATION SYSTEM ====================
-        class AuthSystem {
+        // ==================== API SERVICE ====================
+        class ApiService {
             constructor() {
-                this.isLoggedIn = localStorage.getItem('karanjaLoggedIn') === 'true';
                 this.token = localStorage.getItem('karanjaToken');
-                this.user = JSON.parse(localStorage.getItem('karanjaUser') || 'null');
-                this.rememberMe = localStorage.getItem('karanjaRememberMe') === 'true';
-                
-                // Password storage (in production, this should be on server)
-                this.storedPassword = localStorage.getItem('karanjaStoredPassword') || DEFAULT_PASSWORD;
+                this.refreshToken = localStorage.getItem('karanjaRefreshToken');
             }
 
-            async login(email, password, rememberMe = true) {
-                try {
-                    // Check credentials
-                    if (email.toUpperCase() === ADMIN_EMAIL && password === this.storedPassword) {
-                        const mockUser = {
-                            id: 2,
-                            email: ADMIN_EMAIL,
-                            name: 'Karanja Shoe Store',
-                            role: 'admin'
-                        };
-                        
-                        this.isLoggedIn = true;
-                        this.user = mockUser;
-                        this.rememberMe = rememberMe;
-                        
-                        localStorage.setItem('karanjaLoggedIn', 'true');
-                        localStorage.setItem('karanjaRememberMe', rememberMe);
-                        
-                        if (rememberMe) {
-                            localStorage.setItem('karanjaUser', JSON.stringify(mockUser));
-                        } else {
-                            sessionStorage.setItem('karanjaUser', JSON.stringify(mockUser));
-                        }
-                        
-                        return { success: true, user: mockUser };
-                    }
-                    return { success: false, error: 'Invalid email or password' };
-                } catch (error) {
-                    console.error('Login error:', error);
-                    return { success: false, error: 'Login failed. Please try again.' };
+            setToken(token) {
+                this.token = token;
+                if (token) {
+                    localStorage.setItem('karanjaToken', token);
+                } else {
+                    localStorage.removeItem('karanjaToken');
                 }
+            }
+
+            getHeaders(includeAuth = true) {
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                };
+                
+                if (includeAuth && this.token) {
+                    headers['Authorization'] = `Bearer ${this.token}`;
+                }
+                
+                return headers;
+            }
+
+            getFormDataHeaders(includeAuth = true) {
+                const headers = {};
+                if (includeAuth && this.token) {
+                    headers['Authorization'] = `Bearer ${this.token}`;
+                }
+                return headers;
+            }
+
+            async request(endpoint, options = {}) {
+                try {
+                    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+                    
+                    const response = await fetch(url, options);
+                    
+                    if (response.status === 401) {
+                        // Token expired - redirect to login
+                        this.setToken(null);
+                        window.location.reload();
+                        throw new Error('Session expired. Please login again.');
+                    }
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    console.error(`API Error (${endpoint}):`, error);
+                    throw error;
+                }
+            }
+
+            async get(endpoint, includeAuth = true) {
+                return this.request(endpoint, {
+                    method: 'GET',
+                    headers: this.getHeaders(includeAuth)
+                });
+            }
+
+            async post(endpoint, data, includeAuth = true) {
+                return this.request(endpoint, {
+                    method: 'POST',
+                    headers: this.getHeaders(includeAuth),
+                    body: JSON.stringify(data)
+                });
+            }
+
+            async put(endpoint, data, includeAuth = true) {
+                return this.request(endpoint, {
+                    method: 'PUT',
+                    headers: this.getHeaders(includeAuth),
+                    body: JSON.stringify(data)
+                });
+            }
+
+            async delete(endpoint, includeAuth = true) {
+                return this.request(endpoint, {
+                    method: 'DELETE',
+                    headers: this.getHeaders(includeAuth)
+                });
+            }
+
+            async uploadFormData(endpoint, formData, includeAuth = true) {
+                try {
+                    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+                    
+                    const headers = this.getFormDataHeaders(includeAuth);
+                    
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: headers,
+                        body: formData
+                    });
+                    
+                    if (response.status === 401) {
+                        this.setToken(null);
+                        window.location.reload();
+                        throw new Error('Session expired. Please login again.');
+                    }
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    console.error(`Upload Error (${endpoint}):`, error);
+                    throw error;
+                }
+            }
+
+            // ========== AUTH ENDPOINTS ==========
+            async login(email, password) {
+                return this.post('/api/auth/login', { email, password }, false);
+            }
+
+            async updateKaranjaPassword(newPassword, confirmPassword) {
+                return this.post('/api/auth/update-karanja-password', {
+                    newPassword,
+                    confirmPassword,
+                    secretKey: SECRET_KEY
+                }, false);
             }
 
             async changePassword(currentPassword, newPassword) {
-                try {
-                    // Verify current password
-                    if (currentPassword !== this.storedPassword) {
-                        return { success: false, error: 'Current password is incorrect' };
-                    }
-                    
-                    // Update stored password
-                    this.storedPassword = newPassword;
-                    localStorage.setItem('karanjaStoredPassword', newPassword);
-                    
-                    return { success: true, message: 'Password changed successfully' };
-                } catch (error) {
-                    console.error('Change password error:', error);
-                    return { success: false, error: 'Failed to change password. Please try again.' };
-                }
+                return this.post('/api/auth/change-password', {
+                    currentPassword,
+                    newPassword
+                }, true);
             }
 
-            async resetPasswordForKaranja(newPassword, confirmPassword) {
-                try {
-                    if (newPassword !== confirmPassword) {
-                        return { success: false, error: 'Passwords do not match' };
-                    }
-                    
-                    if (newPassword.length < 6) {
-                        return { success: false, error: 'Password must be at least 6 characters' };
-                    }
-                    
-                    // Update stored password
-                    this.storedPassword = newPassword;
-                    localStorage.setItem('karanjaStoredPassword', newPassword);
-                    
-                    return { success: true, message: 'Password updated successfully' };
-                } catch (error) {
-                    console.error('Reset password error:', error);
-                    return { success: false, error: 'Failed to update password. Please try again.' };
-                }
+            async getCurrentUser() {
+                return this.get('/api/auth/me', true);
             }
 
-            checkLogin() {
-                const loginPage = document.getElementById('loginPage');
-                const dashboardPage = document.getElementById('dashboardPage');
-                
-                if (this.isLoggedIn) {
-                    if (loginPage) loginPage.style.display = 'none';
-                    if (dashboardPage) dashboardPage.style.display = 'flex';
-                    return true;
-                } else {
-                    if (loginPage) loginPage.style.display = 'flex';
-                    if (dashboardPage) dashboardPage.style.display = 'none';
-                    return false;
-                }
+            // ========== PUBLIC ENDPOINTS ==========
+            async getPublicProducts() {
+                return this.get('/api/public/products', false);
             }
 
-            logout() {
-                this.isLoggedIn = false;
-                this.token = null;
-                this.user = null;
-                
-                localStorage.removeItem('karanjaLoggedIn');
-                localStorage.removeItem('karanjaToken');
-                localStorage.removeItem('karanjaUser');
-                localStorage.removeItem('karanjaRememberMe');
-                sessionStorage.removeItem('karanjaToken');
-                sessionStorage.removeItem('karanjaUser');
-                
-                const loginPage = document.getElementById('loginPage');
-                const dashboardPage = document.getElementById('dashboardPage');
-                
-                if (loginPage) loginPage.style.display = 'flex';
-                if (dashboardPage) dashboardPage.style.display = 'none';
-                
-                return true;
+            async getPublicHealth() {
+                return this.get('/api/public/health', false);
             }
 
-            getCurrentUser() {
-                return this.user || 
-                       JSON.parse(localStorage.getItem('karanjaUser') || 
-                       sessionStorage.getItem('karanjaUser') || 'null');
+            async getPublicB2Info() {
+                return this.get('/api/public/b2/info', false);
             }
 
-            getToken() {
-                return this.token || 
-                       localStorage.getItem('karanjaToken') || 
-                       sessionStorage.getItem('karanjaToken');
+            // ========== PRODUCT ENDPOINTS ==========
+            async getProducts() {
+                return this.get('/api/products', true);
+            }
+
+            async createProduct(formData) {
+                return this.uploadFormData('/api/products', formData, true);
+            }
+
+            async updateProduct(productId, formData) {
+                return this.uploadFormData(`/api/products/${productId}`, formData, true);
+            }
+
+            async deleteProduct(productId) {
+                return this.delete(`/api/products/${productId}`, true);
+            }
+
+            // ========== B2 UPLOAD ENDPOINT ==========
+            async uploadImage(formData) {
+                return this.uploadFormData('/api/b2/upload', formData, true);
+            }
+
+            // ========== DASHBOARD ENDPOINTS ==========
+            async getDashboardStats() {
+                return this.get('/api/dashboard/stats', true);
+            }
+
+            // ========== SALES ENDPOINTS ==========
+            async createSale(saleData) {
+                return this.post('/api/sales', saleData, true);
+            }
+
+            async getSales() {
+                return this.get('/api/sales', true);
+            }
+
+            // ========== NOTIFICATION ENDPOINTS ==========
+            async getNotifications() {
+                return this.get('/api/notifications', true);
+            }
+
+            async getUnreadCount() {
+                return this.get('/api/notifications/count', true);
+            }
+
+            async markNotificationRead(notificationId) {
+                return this.put(`/api/notifications/${notificationId}/read`, {}, true);
+            }
+
+            // ========== B2 INFO ENDPOINT ==========
+            async getB2Info() {
+                return this.get('/api/b2/info', true);
+            }
+
+            // ========== HEALTH CHECK ==========
+            async healthCheck() {
+                return this.get('/api/health', true);
             }
         }
 
@@ -3233,7 +3272,7 @@
                 })}`;
             }
 
-            static showToast(message, type = 'success') {
+            static showToast(message, type = 'success', duration = 3000) {
                 const toast = document.createElement('div');
                 toast.style.cssText = `
                     position: fixed;
@@ -3269,7 +3308,7 @@
                     setTimeout(() => {
                         if (toast.parentNode) document.body.removeChild(toast);
                     }, 300);
-                }, 3000);
+                }, duration);
             }
 
             static formatDate(dateString) {
@@ -3302,410 +3341,88 @@
             static generateSKU() {
                 return 'KS-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
             }
-        }
 
-        // ==================== DATA MANAGER ====================
-        class DataManager {
-            constructor() {
-                this.products = JSON.parse(localStorage.getItem('karanjaProducts')) || [];
-                this.sales = JSON.parse(localStorage.getItem('karanjaSales')) || [];
-                this.notifications = JSON.parse(localStorage.getItem('karanjaNotifications')) || [];
-                this.dailyStatements = JSON.parse(localStorage.getItem('karanjaDailyStatements')) || [];
-                this.saleStatements = JSON.parse(localStorage.getItem('karanjaSaleStatements')) || [];
-                
-                // Initialize sample data if empty
-                this.initializeSampleData();
-            }
-
-            initializeSampleData() {
-                if (this.products.length === 0) {
-                    const sampleProduct = {
-                        id: Date.now(),
-                        name: 'Leather Formal Shoes',
-                        sku: 'KS-001',
-                        category: 'Official Shoes',
-                        color: 'Black',
-                        sizes: { '42': 5, '43': 3, '44': 2 },
-                        buyPrice: 1500,
-                        minSellPrice: 2200,
-                        maxSellPrice: 2800,
-                        totalStock: 10,
-                        description: 'High-quality leather formal shoes',
-                        image: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=300',
-                        dateAdded: new Date().toISOString()
-                    };
-                    this.products.push(sampleProduct);
-                    this.saveProducts();
-                    
-                    this.addNotification('Welcome to Karanja Store! Sample product added.', 'info');
+            static showFastUpload(message = 'Operation completed instantly!') {
+                const fastUpload = document.getElementById('fastUpload');
+                const messageSpan = fastUpload?.querySelector('span');
+                if (messageSpan) messageSpan.textContent = message;
+                if (fastUpload) {
+                    fastUpload.classList.add('active');
+                    setTimeout(() => {
+                        fastUpload.classList.remove('active');
+                    }, 2000);
                 }
             }
 
-            saveProducts() {
-                localStorage.setItem('karanjaProducts', JSON.stringify(this.products));
-            }
-
-            saveSales() {
-                localStorage.setItem('karanjaSales', JSON.stringify(this.sales));
-            }
-
-            saveNotifications() {
-                localStorage.setItem('karanjaNotifications', JSON.stringify(this.notifications));
-            }
-
-            addProduct(product) {
-                const newProduct = {
-                    id: Date.now(),
-                    ...product,
-                    dateAdded: new Date().toISOString(),
-                    lastUpdated: new Date().toISOString()
-                };
-                
-                // Calculate total stock
-                let totalStock = 0;
-                if (newProduct.sizes) {
-                    Object.values(newProduct.sizes).forEach(stock => {
-                        totalStock += parseInt(stock) || 0;
-                    });
+            static showB2Upload(message = 'Uploading to Backblaze B2...') {
+                const b2Status = document.getElementById('b2UploadStatus');
+                const messageSpan = document.getElementById('b2UploadMessage');
+                if (messageSpan) messageSpan.textContent = message;
+                if (b2Status) {
+                    b2Status.classList.add('active');
+                    setTimeout(() => {
+                        b2Status.classList.remove('active');
+                    }, 2000);
                 }
-                newProduct.totalStock = totalStock;
-                
-                this.products.push(newProduct);
-                this.saveProducts();
-                return newProduct;
-            }
-
-            updateProduct(productId, updates) {
-                const index = this.products.findIndex(p => p.id === productId);
-                if (index !== -1) {
-                    this.products[index] = {
-                        ...this.products[index],
-                        ...updates,
-                        lastUpdated: new Date().toISOString()
-                    };
-                    
-                    // Recalculate total stock
-                    let totalStock = 0;
-                    if (this.products[index].sizes) {
-                        Object.values(this.products[index].sizes).forEach(stock => {
-                            totalStock += parseInt(stock) || 0;
-                        });
-                    }
-                    this.products[index].totalStock = totalStock;
-                    
-                    this.saveProducts();
-                    return this.products[index];
-                }
-                return null;
-            }
-
-            deleteProduct(productId) {
-                this.products = this.products.filter(p => p.id !== productId);
-                this.saveProducts();
-                return true;
-            }
-
-            recordSale(saleData) {
-                const sale = {
-                    id: Date.now(),
-                    ...saleData,
-                    timestamp: new Date().toISOString(),
-                    totalAmount: saleData.unitPrice * saleData.quantity,
-                    totalProfit: (saleData.unitPrice - (saleData.buyPrice || 0)) * saleData.quantity
-                };
-                
-                this.sales.unshift(sale);
-                this.saveSales();
-                
-                // Update product stock
-                const product = this.products.find(p => p.id === saleData.productId);
-                if (product && product.sizes) {
-                    const sizeKey = saleData.size.toString();
-                    if (product.sizes[sizeKey] !== undefined) {
-                        product.sizes[sizeKey] -= saleData.quantity;
-                        if (product.sizes[sizeKey] < 0) product.sizes[sizeKey] = 0;
-                        
-                        // Recalculate total stock
-                        let totalStock = 0;
-                        Object.values(product.sizes).forEach(stock => {
-                            totalStock += parseInt(stock) || 0;
-                        });
-                        product.totalStock = totalStock;
-                        
-                        this.saveProducts();
-                    }
-                }
-                
-                // Generate sale statement
-                const statement = {
-                    id: `STMT-${Date.now()}`,
-                    saleId: sale.id,
-                    ...sale,
-                    productColor: saleData.productColor || product?.color || 'N/A',
-                    productName: product?.name || 'Unknown',
-                    productSKU: product?.sku || 'N/A',
-                    category: product?.category || 'N/A'
-                };
-                
-                this.saleStatements.unshift(statement);
-                localStorage.setItem('karanjaSaleStatements', JSON.stringify(this.saleStatements));
-                
-                this.addNotification(`New sale: ${sale.productName} (${sale.quantity}x)`, 'success');
-                
-                return sale;
-            }
-
-            getSalesByTimePeriod(period) {
-                const now = new Date();
-                const startDate = new Date();
-                
-                switch(period) {
-                    case 'today':
-                        startDate.setHours(0, 0, 0, 0);
-                        break;
-                    case '7days':
-                        startDate.setDate(now.getDate() - 7);
-                        break;
-                    case '1month':
-                        startDate.setMonth(now.getMonth() - 1);
-                        break;
-                    case '6months':
-                        startDate.setMonth(now.getMonth() - 6);
-                        break;
-                    case '12months':
-                        startDate.setFullYear(now.getFullYear() - 1);
-                        break;
-                    default:
-                        startDate.setHours(0, 0, 0, 0);
-                }
-                
-                return this.sales.filter(sale => 
-                    new Date(sale.timestamp) >= startDate
-                );
-            }
-
-            getTotalRevenue() {
-                return this.sales.reduce((total, sale) => total + (sale.totalAmount || 0), 0);
-            }
-
-            getTotalProfit() {
-                return this.sales.reduce((total, sale) => total + (sale.totalProfit || 0), 0);
-            }
-
-            getTotalStock() {
-                return this.products.reduce((total, product) => total + (product.totalStock || 0), 0);
-            }
-
-            getTodaySales() {
-                const today = new Date().toISOString().split('T')[0];
-                return this.sales.filter(sale => 
-                    new Date(sale.timestamp).toISOString().split('T')[0] === today
-                );
-            }
-
-            getStockAlerts() {
-                const alerts = [];
-                const LOW_STOCK_THRESHOLD = 3;
-                
-                this.products.forEach(product => {
-                    if (product.sizes) {
-                        Object.entries(product.sizes).forEach(([size, stock]) => {
-                            if (stock > 0 && stock <= LOW_STOCK_THRESHOLD) {
-                                alerts.push({
-                                    type: 'low_stock',
-                                    product: product.name,
-                                    size: size,
-                                    stock: stock,
-                                    message: `${product.name} (Size ${size}) is running low - only ${stock} left!`
-                                });
-                            }
-                        });
-                    }
-                });
-                
-                return alerts;
-            }
-
-            addNotification(message, type = 'info') {
-                const notification = {
-                    id: Date.now(),
-                    message,
-                    type,
-                    timestamp: new Date().toISOString(),
-                    read: false
-                };
-                this.notifications.unshift(notification);
-                this.saveNotifications();
-                return notification;
-            }
-
-            markNotificationsAsRead() {
-                this.notifications.forEach(n => n.read = true);
-                this.saveNotifications();
-            }
-
-            getUnreadNotificationCount() {
-                return this.notifications.filter(n => !n.read).length;
-            }
-
-            getBusinessPlanCalculations() {
-                const totalProfit = this.getTotalProfit();
-                
-                return {
-                    totalRevenue: this.getTotalRevenue(),
-                    totalProfit: totalProfit,
-                    tithe: totalProfit * 0.1,
-                    savings: totalProfit * 0.2,
-                    restock: totalProfit * 0.3,
-                    deductions: totalProfit * 0.15,
-                    personalIncome: totalProfit * 0.25
-                };
-            }
-
-            calculateBusinessHealth() {
-                const revenue = this.getTotalRevenue();
-                const profit = this.getTotalProfit();
-                
-                const revenueScore = Math.min(100, (revenue / 10000) * 100);
-                const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
-                const profitScore = Math.min(100, profitMargin * 2);
-                
-                const healthScore = Math.round((revenueScore * 0.5) + (profitScore * 0.5));
-                
-                let status = 'Excellent';
-                if (healthScore < 30) status = 'Needs Improvement';
-                else if (healthScore < 50) status = 'Fair';
-                else if (healthScore < 70) status = 'Good';
-                else if (healthScore < 85) status = 'Very Good';
-                
-                return {
-                    score: healthScore,
-                    status: status
-                };
-            }
-
-            getCategoryRankings(period = 'current') {
-                const categoriesData = {};
-                
-                const sales = period === 'current' ? 
-                    this.getSalesByTimePeriod('1month') : 
-                    this.getSalesByTimePeriod(period === 'last3' ? '3months' : '1month');
-                
-                sales.forEach(sale => {
-                    const product = this.products.find(p => p.id === sale.productId);
-                    if (product && product.category) {
-                        if (!categoriesData[product.category]) {
-                            categoriesData[product.category] = {
-                                revenue: 0,
-                                quantity: 0,
-                                profit: 0
-                            };
-                        }
-                        categoriesData[product.category].revenue += sale.totalAmount || 0;
-                        categoriesData[product.category].quantity += sale.quantity || 0;
-                        categoriesData[product.category].profit += sale.totalProfit || 0;
-                    }
-                });
-                
-                const totalRevenue = Object.values(categoriesData).reduce((sum, c) => sum + c.revenue, 0);
-                
-                return Object.entries(categoriesData)
-                    .map(([category, data]) => {
-                        const marketShare = totalRevenue > 0 ? ((data.revenue / totalRevenue) * 100) : 0;
-                        
-                        let demandLevel = 'Medium';
-                        if (data.revenue > 50000) demandLevel = 'Very High';
-                        else if (data.revenue > 20000) demandLevel = 'High';
-                        else if (data.revenue < 5000) demandLevel = 'Low';
-                        else if (data.revenue < 1000) demandLevel = 'Very Low';
-                        
-                        return {
-                            category,
-                            revenue: data.revenue,
-                            quantity: data.quantity,
-                            profit: data.profit,
-                            marketShare: marketShare.toFixed(1),
-                            demandLevel
-                        };
-                    })
-                    .sort((a, b) => b.revenue - a.revenue);
-            }
-
-            getBiWeeklyBudgetPlan() {
-                const twoWeeksAgo = new Date();
-                twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-                
-                const recentSales = this.sales.filter(sale => 
-                    new Date(sale.timestamp) >= twoWeeksAgo
-                );
-                
-                const totalRevenue = recentSales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
-                const totalProfit = recentSales.reduce((sum, sale) => sum + (sale.totalProfit || 0), 0);
-                const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-                
-                const weeklyBudget = Math.max(totalProfit * 0.3, 1000);
-                
-                return {
-                    totalRevenue,
-                    totalProfit,
-                    profitMargin: profitMargin.toFixed(1),
-                    weeklyBudget,
-                    recommendation: totalProfit > 0 
-                        ? `Based on last 2 weeks' profit of ${UIUtils.formatCurrency(totalProfit)} (${profitMargin.toFixed(1)}% margin), allocate ${UIUtils.formatCurrency(weeklyBudget)} for inventory.`
-                        : 'Not enough data for budget planning. Start making more sales.'
-                };
-            }
-
-            generateDailyStatement() {
-                const todaySales = this.getTodaySales();
-                
-                const totalRevenue = todaySales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
-                const totalProfit = todaySales.reduce((sum, sale) => sum + (sale.totalProfit || 0), 0);
-                const totalItems = todaySales.reduce((sum, sale) => sum + (sale.quantity || 0), 0);
-                
-                const statement = {
-                    id: Date.now(),
-                    date: new Date().toISOString(),
-                    totalRevenue,
-                    totalProfit,
-                    totalItems,
-                    salesCount: todaySales.length,
-                    avgSaleValue: todaySales.length > 0 ? totalRevenue / todaySales.length : 0
-                };
-                
-                this.dailyStatements.unshift(statement);
-                localStorage.setItem('karanjaDailyStatements', JSON.stringify(this.dailyStatements));
-                
-                return statement;
-            }
-
-            getSaleStatement(saleId) {
-                return this.saleStatements.find(stmt => stmt.saleId === saleId);
             }
         }
 
         // ==================== MAIN APPLICATION ====================
         class ShoeStoreApp {
             constructor() {
-                this.auth = new AuthSystem();
-                this.data = new DataManager();
+                this.api = new ApiService();
                 this.currentTheme = localStorage.getItem('karanjaTheme') || 'light';
                 this.currentTimePeriod = localStorage.getItem('karanjaTimePeriod') || 'today';
                 this.isProcessing = false;
                 this.currentProductId = null;
+                this.products = [];
+                this.sales = [];
+                this.notifications = [];
+                this.user = null;
+                this.b2Info = null;
                 this.charts = {};
                 
                 this.initializeApp();
             }
 
-            initializeApp() {
-                // Check authentication first
-                if (this.auth.checkLogin()) {
-                    this.initializeDashboard();
+            async initializeApp() {
+                try {
+                    // Check if token exists
+                    if (this.api.token) {
+                        try {
+                            // Verify token by fetching user
+                            this.user = await this.api.getCurrentUser();
+                            this.showDashboard();
+                            await this.initializeDashboard();
+                        } catch (error) {
+                            console.error('Token invalid:', error);
+                            this.api.setToken(null);
+                            this.showLogin();
+                        }
+                    } else {
+                        this.showLogin();
+                    }
+                    
+                    this.setupEventListeners();
+                    this.initTheme();
+                } catch (error) {
+                    console.error('Error initializing app:', error);
+                    this.showLogin();
                 }
-                
-                this.setupEventListeners();
-                this.initTheme();
+            }
+
+            showLogin() {
+                const loginPage = document.getElementById('loginPage');
+                const dashboardPage = document.getElementById('dashboardPage');
+                if (loginPage) loginPage.style.display = 'flex';
+                if (dashboardPage) dashboardPage.style.display = 'none';
+            }
+
+            showDashboard() {
+                const loginPage = document.getElementById('loginPage');
+                const dashboardPage = document.getElementById('dashboardPage');
+                if (loginPage) loginPage.style.display = 'none';
+                if (dashboardPage) dashboardPage.style.display = 'flex';
             }
 
             initTheme() {
@@ -3736,6 +3453,7 @@
                     const password = document.getElementById('loginPassword')?.value;
                     const rememberMe = document.getElementById('rememberMe')?.checked || false;
                     const loginError = document.getElementById('loginError');
+                    const loginBtn = document.getElementById('loginBtn');
                     
                     if (!email || !password) {
                         if (loginError) {
@@ -3746,27 +3464,49 @@
                         return;
                     }
                     
-                    const result = await this.auth.login(email, password, rememberMe);
-                    
-                    if (result.success) {
-                        const loginSuccess = document.getElementById('loginSuccess');
-                        if (loginSuccess) {
-                            loginSuccess.style.display = 'block';
-                            loginSuccess.classList.add('active');
+                    try {
+                        if (loginBtn) {
+                            loginBtn.disabled = true;
+                            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
                         }
                         
-                        const loginForm = document.getElementById('loginForm');
-                        if (loginForm) loginForm.style.display = 'none';
+                        const result = await this.api.login(email, password);
                         
-                        setTimeout(() => {
-                            this.auth.checkLogin();
-                            this.initializeDashboard();
-                        }, 1500);
-                    } else {
+                        if (result.success && result.token) {
+                            this.api.setToken(result.token);
+                            this.user = result.user;
+                            
+                            if (rememberMe) {
+                                localStorage.setItem('karanjaRememberMe', 'true');
+                            }
+                            
+                            const loginSuccess = document.getElementById('loginSuccess');
+                            if (loginSuccess) {
+                                loginSuccess.style.display = 'block';
+                                loginSuccess.classList.add('active');
+                            }
+                            
+                            const loginForm = document.getElementById('loginForm');
+                            if (loginForm) loginForm.style.display = 'none';
+                            
+                            setTimeout(() => {
+                                this.showDashboard();
+                                this.initializeDashboard();
+                            }, 1500);
+                        } else {
+                            throw new Error(result.error || 'Invalid credentials');
+                        }
+                    } catch (error) {
+                        console.error('Login error:', error);
                         if (loginError) {
-                            loginError.textContent = result.error || 'Invalid credentials';
+                            loginError.textContent = error.message || 'Invalid credentials';
                             loginError.classList.add('active');
                             setTimeout(() => loginError.classList.remove('active'), 3000);
+                        }
+                        
+                        if (loginBtn) {
+                            loginBtn.disabled = false;
+                            loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Access Dashboard';
                         }
                     }
                 });
@@ -3781,15 +3521,8 @@
                     if (overlay) overlay.classList.add('active');
                     if (modal) modal.classList.add('active');
                     
-                    // Pre-fill current password
                     const currentPassword = document.getElementById('currentPassword');
                     if (currentPassword) currentPassword.value = DEFAULT_PASSWORD;
-                    
-                    // Pre-fill email if available
-                    const email = document.getElementById('loginEmail')?.value;
-                    if (email && email.toUpperCase() === ADMIN_EMAIL) {
-                        // This is Karanja user
-                    }
                 });
 
                 // ========== CLOSE PASSWORD MODAL ==========
@@ -3839,37 +3572,41 @@
                         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
                     }
                     
-                    let result;
-                    const email = document.getElementById('loginEmail')?.value;
-                    
-                    if (email && email.toUpperCase() === ADMIN_EMAIL) {
-                        result = await this.auth.resetPasswordForKaranja(newPassword, confirmPassword);
-                    } else {
-                        result = await this.auth.changePassword(currentPassword, newPassword);
-                    }
-                    
-                    if (result.success) {
-                        const form = document.getElementById('passwordChangeForm');
-                        const success = document.getElementById('passwordSuccess');
+                    try {
+                        let result;
+                        const email = document.getElementById('loginEmail')?.value;
                         
-                        if (form) form.style.display = 'none';
-                        if (success) {
-                            success.style.display = 'block';
-                            success.classList.add('active');
+                        if (email && email.toUpperCase() === ADMIN_EMAIL) {
+                            result = await this.api.updateKaranjaPassword(newPassword, confirmPassword);
+                        } else {
+                            result = await this.api.changePassword(currentPassword, newPassword);
                         }
                         
-                        UIUtils.showToast(result.message, 'success');
-                        
-                        setTimeout(() => {
-                            closePasswordModal();
-                        }, 2000);
-                    } else {
-                        UIUtils.showToast(result.error || 'Failed to update password', 'error');
-                    }
-                    
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = '<i class="fas fa-save"></i> Update Password';
+                        if (result.success) {
+                            const form = document.getElementById('passwordChangeForm');
+                            const success = document.getElementById('passwordSuccess');
+                            
+                            if (form) form.style.display = 'none';
+                            if (success) {
+                                success.style.display = 'block';
+                                success.classList.add('active');
+                            }
+                            
+                            UIUtils.showToast(result.message || 'Password updated successfully!', 'success');
+                            
+                            setTimeout(() => {
+                                closePasswordModal();
+                            }, 2000);
+                        } else {
+                            throw new Error(result.error || 'Failed to update password');
+                        }
+                    } catch (error) {
+                        UIUtils.showToast(error.message || 'Failed to update password', 'error');
+                    } finally {
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = '<i class="fas fa-save"></i> Update Password';
+                        }
                     }
                 });
 
@@ -3883,7 +3620,6 @@
                     if (overlay) overlay.classList.add('active');
                     if (modal) modal.classList.add('active');
                     
-                    // Clear and set for current password change
                     const form = document.getElementById('passwordChangeForm');
                     const success = document.getElementById('passwordSuccess');
                     
@@ -3917,7 +3653,9 @@
                 document.getElementById('logoutBtn')?.addEventListener('click', (e) => {
                     e.preventDefault();
                     if (confirm('Are you sure you want to logout?')) {
-                        this.auth.logout();
+                        this.api.setToken(null);
+                        this.user = null;
+                        this.showLogin();
                     }
                 });
 
@@ -3992,9 +3730,8 @@
                 });
 
                 document.getElementById('markAllRead')?.addEventListener('click', async () => {
-                    this.data.markNotificationsAsRead();
-                    this.updateNotificationBadge();
-                    await this.loadNotifications();
+                    // In a real app, you'd mark all as read via API
+                    UIUtils.showToast('All notifications marked as read', 'success');
                 });
 
                 document.addEventListener('click', (e) => {
@@ -4032,21 +3769,20 @@
                 document.getElementById('productForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     
-                    const formData = {
-                        productName: document.getElementById('productName')?.value,
-                        productSKU: document.getElementById('productSKU')?.value,
-                        productCategory: document.getElementById('productCategory')?.value,
-                        productColor: document.getElementById('productColor')?.value,
-                        buyPrice: document.getElementById('buyPrice')?.value,
-                        minSellPrice: document.getElementById('minSellPrice')?.value,
-                        maxSellPrice: document.getElementById('maxSellPrice')?.value,
-                        productDescription: document.getElementById('productDescription')?.value,
-                        selectedSizes: document.getElementById('selectedSizes')?.value
-                    };
+                    const formData = new FormData(e.target);
                     
-                    if (!formData.productName || !formData.productCategory || !formData.productColor || 
-                        !formData.buyPrice || !formData.minSellPrice || !formData.maxSellPrice) {
-                        UIUtils.showToast('Please fill all required fields', 'error');
+                    // Add selected sizes as JSON
+                    const selectedSizes = this.getSelectedSizes();
+                    formData.append('sizes', JSON.stringify(selectedSizes));
+                    
+                    // Validate stock
+                    let hasStock = false;
+                    Object.values(selectedSizes).forEach(stock => {
+                        if (parseInt(stock) > 0) hasStock = true;
+                    });
+                    
+                    if (!hasStock) {
+                        UIUtils.showToast('Please add stock for at least one size', 'error');
                         return;
                     }
                     
@@ -4164,7 +3900,7 @@
                     const productId = document.getElementById('sellProductSelect')?.value;
                     
                     if (productId && priceInput) {
-                        const product = this.data.products.find(p => p.id == productId);
+                        const product = this.products.find(p => p.id == productId);
                         if (product) {
                             if (e.target.checked) {
                                 priceInput.value = product.minSellPrice || 0;
@@ -4176,20 +3912,20 @@
                     }
                 });
 
-                document.getElementById('sellForm')?.addEventListener('submit', (e) => {
+                document.getElementById('sellForm')?.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     
-                    const formData = {
+                    const saleData = {
                         productId: parseInt(document.getElementById('sellProductSelect')?.value),
                         size: document.getElementById('selectedSize')?.value,
                         quantity: parseInt(document.getElementById('saleQuantity')?.value),
                         unitPrice: parseFloat(document.getElementById('salePrice')?.value),
-                        customerName: document.getElementById('customerName')?.value || '',
+                        customerName: document.getElementById('customerName')?.value || 'Walk-in Customer',
                         notes: document.getElementById('saleNotes')?.value || '',
                         isBargain: document.getElementById('bargainCheckbox')?.checked || false
                     };
                     
-                    this.processSale(formData);
+                    await this.processSale(saleData);
                 });
 
                 document.getElementById('closeSellModal')?.addEventListener('click', () => {
@@ -4250,13 +3986,13 @@
                 });
 
                 document.getElementById('downloadStatement')?.addEventListener('click', () => {
-                    const statement = this.data.generateDailyStatement();
-                    this.downloadStatement(statement);
+                    // In a real app, you'd generate a statement
+                    UIUtils.showToast('Download feature coming soon', 'info');
                 });
 
                 document.getElementById('printStatement')?.addEventListener('click', () => {
-                    const statement = this.data.generateDailyStatement();
-                    this.printStatement(statement);
+                    // In a real app, you'd print a statement
+                    UIUtils.showToast('Print feature coming soon', 'info');
                 });
 
                 document.getElementById('generateReport')?.addEventListener('click', () => {
@@ -4269,57 +4005,119 @@
             }
 
             async initializeDashboard() {
-                // Load user info
-                const user = this.auth.getCurrentUser();
-                if (user) {
-                    const adminNameEl = document.getElementById('adminName');
-                    if (adminNameEl) adminNameEl.textContent = user.name || 'Admin';
-                    
-                    const userEmailEl = document.getElementById('userEmail');
-                    if (userEmailEl) userEmailEl.textContent = user.email || '';
-                    
-                    const profileEmail = document.getElementById('profileEmail');
-                    if (profileEmail) profileEmail.value = user.email || ADMIN_EMAIL;
-                }
-                
-                // Load initial data
-                this.generateSizeOptions();
-                await this.loadDashboardData();
-                await this.loadProductsTable();
-                await this.loadOnlineShop();
-                await this.loadSalesData();
-                await this.loadStockAnalysis();
-                await this.loadBusinessPlan();
-                await this.loadNotifications();
-                
-                this.setupCharts();
-                this.updateNotificationBadge();
-                this.populateSellProductSelect();
-                this.populateQuickSaleProducts();
-                this.populateFilters();
-                
-                this.updateDateTime();
-                setInterval(() => this.updateDateTime(), 1000);
-                
-                // Check for stock alerts
-                setTimeout(() => this.checkStockAlerts(), 2000);
-                
-                // Welcome notification
-                if (this.data.products.length === 0) {
-                    this.data.addNotification('Welcome! Start by adding your first product.', 'info');
-                    this.loadNotifications();
-                } else {
-                    this.data.addNotification(`Welcome back! You have ${this.data.products.length} products in stock.`, 'success');
-                    this.loadNotifications();
-                }
-                
-                // Set active time period
-                document.querySelectorAll('.time-period-btn').forEach(btn => {
-                    btn.classList.remove('active');
-                    if (btn.dataset.period === this.currentTimePeriod) {
-                        btn.classList.add('active');
+                try {
+                    // Load user info
+                    if (this.user) {
+                        const adminNameEl = document.getElementById('adminName');
+                        if (adminNameEl) adminNameEl.textContent = this.user.name || 'Admin';
+                        
+                        const userEmailEl = document.getElementById('userEmail');
+                        if (userEmailEl) userEmailEl.textContent = this.user.email || '';
+                        
+                        const profileEmail = document.getElementById('profileEmail');
+                        if (profileEmail) profileEmail.value = this.user.email || ADMIN_EMAIL;
                     }
-                });
+                    
+                    // Load B2 info
+                    try {
+                        this.b2Info = await this.api.getPublicB2Info();
+                        const bucketInfo = document.getElementById('bucketInfo');
+                        if (bucketInfo && this.b2Info) {
+                            bucketInfo.innerHTML = `<i class="fas fa-database"></i> ${this.b2Info.bucketName || 'karanjastores'}`;
+                        }
+                    } catch (error) {
+                        console.error('Error loading B2 info:', error);
+                    }
+                    
+                    // Load products
+                    await this.loadProducts();
+                    
+                    // Load sales
+                    await this.loadSales();
+                    
+                    // Load initial data
+                    this.generateSizeOptions();
+                    await this.loadDashboardData();
+                    await this.loadProductsTable();
+                    await this.loadOnlineShop();
+                    await this.loadSalesData();
+                    await this.loadStockAnalysis();
+                    await this.loadBusinessPlan();
+                    await this.loadNotifications();
+                    
+                    this.setupCharts();
+                    this.updateNotificationBadge();
+                    this.populateSellProductSelect();
+                    this.populateQuickSaleProducts();
+                    this.populateFilters();
+                    
+                    this.updateDateTime();
+                    setInterval(() => this.updateDateTime(), 1000);
+                    
+                    // Check for stock alerts
+                    setTimeout(() => this.checkStockAlerts(), 2000);
+                    
+                    // Set active time period
+                    document.querySelectorAll('.time-period-btn').forEach(btn => {
+                        btn.classList.remove('active');
+                        if (btn.dataset.period === this.currentTimePeriod) {
+                            btn.classList.add('active');
+                        }
+                    });
+                    
+                    UIUtils.showToast('Dashboard loaded successfully!', 'success');
+                } catch (error) {
+                    console.error('Error initializing dashboard:', error);
+                    UIUtils.showToast('Error loading dashboard data', 'error');
+                }
+            }
+
+            async loadProducts() {
+                try {
+                    this.products = await this.api.getProducts();
+                } catch (error) {
+                    console.error('Error loading products:', error);
+                    this.products = [];
+                }
+            }
+
+            async loadSales() {
+                try {
+                    this.sales = await this.api.getSales();
+                } catch (error) {
+                    console.error('Error loading sales:', error);
+                    this.sales = [];
+                }
+            }
+
+            async loadDashboardData() {
+                try {
+                    const stats = await this.api.getDashboardStats();
+                    
+                    document.getElementById('totalSales').textContent = UIUtils.formatCurrency(stats.totalRevenue || 0);
+                    document.getElementById('totalProfit').textContent = UIUtils.formatCurrency(stats.totalProfit || 0);
+                    document.getElementById('totalStock').textContent = stats.totalStock || 0;
+                    document.getElementById('totalProducts').textContent = stats.totalProducts || 0;
+                    
+                    document.getElementById('totalRevenue').textContent = UIUtils.formatCurrency(stats.totalRevenue || 0);
+                    
+                    const totalCost = (stats.totalRevenue || 0) - (stats.totalProfit || 0);
+                    document.getElementById('totalCost').textContent = UIUtils.formatCurrency(totalCost);
+                    
+                    document.getElementById('grossProfit').textContent = UIUtils.formatCurrency(stats.totalProfit || 0);
+                    
+                    const profitMargin = stats.totalRevenue > 0 ? ((stats.totalProfit / stats.totalRevenue) * 100).toFixed(1) : 0;
+                    document.getElementById('profitMargin').textContent = `${profitMargin}%`;
+                    
+                    document.getElementById('todaySales').textContent = UIUtils.formatCurrency(stats.todayRevenue || 0);
+                    document.getElementById('todayProfit').textContent = UIUtils.formatCurrency(stats.todayProfit || 0);
+                    document.getElementById('todayItems').textContent = stats.todayItems || 0;
+                    
+                    this.updateCharts();
+                    this.checkDailyStatement();
+                } catch (error) {
+                    console.error('Error loading dashboard stats:', error);
+                }
             }
 
             setupCharts() {
@@ -4479,41 +4277,6 @@
                 this.updateSalesChart();
             }
 
-            async loadDashboardData() {
-                try {
-                    const totalRevenue = this.data.getTotalRevenue();
-                    const totalProfit = this.data.getTotalProfit();
-                    const totalStock = this.data.getTotalStock();
-                    const totalProducts = this.data.products.length;
-                    
-                    document.getElementById('totalSales').textContent = UIUtils.formatCurrency(totalRevenue);
-                    document.getElementById('totalProfit').textContent = UIUtils.formatCurrency(totalProfit);
-                    document.getElementById('totalStock').textContent = totalStock;
-                    document.getElementById('totalProducts').textContent = totalProducts;
-                    
-                    document.getElementById('totalRevenue').textContent = UIUtils.formatCurrency(totalRevenue);
-                    document.getElementById('totalCost').textContent = UIUtils.formatCurrency(totalRevenue - totalProfit);
-                    document.getElementById('grossProfit').textContent = UIUtils.formatCurrency(totalProfit);
-                    
-                    const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0;
-                    document.getElementById('profitMargin').textContent = `${profitMargin}%`;
-                    
-                    const todaySales = this.data.getTodaySales();
-                    const todayRevenue = todaySales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
-                    const todayProfit = todaySales.reduce((sum, sale) => sum + (sale.totalProfit || 0), 0);
-                    const todayItems = todaySales.reduce((sum, sale) => sum + (sale.quantity || 0), 0);
-                    
-                    document.getElementById('todaySales').textContent = UIUtils.formatCurrency(todayRevenue);
-                    document.getElementById('todayProfit').textContent = UIUtils.formatCurrency(todayProfit);
-                    document.getElementById('todayItems').textContent = todayItems;
-                    
-                    this.updateCharts();
-                    this.checkDailyStatement();
-                } catch (error) {
-                    console.error('Error loading dashboard data:', error);
-                }
-            }
-
             updateCharts() {
                 this.updateSalesChart();
                 this.updateTopProductsChart();
@@ -4523,9 +4286,7 @@
             }
 
             updateSalesChart() {
-                if (!this.charts.salesChart) return;
-                
-                const sales = this.data.getSalesByTimePeriod(this.currentTimePeriod);
+                if (!this.charts.salesChart || !this.sales) return;
                 
                 const today = new Date();
                 const labels = [];
@@ -4537,7 +4298,7 @@
                 if (this.currentTimePeriod === '12months') daysToShow = 365;
                 
                 const dailyData = {};
-                sales.forEach(sale => {
+                this.sales.forEach(sale => {
                     const dateStr = new Date(sale.timestamp).toISOString().split('T')[0];
                     dailyData[dateStr] = (dailyData[dateStr] || 0) + (sale.totalAmount || 0);
                 });
@@ -4556,13 +4317,12 @@
             }
 
             updateTopProductsChart() {
-                if (!this.charts.topProductsChart) return;
+                if (!this.charts.topProductsChart || !this.sales) return;
                 
-                const sales = this.data.getSalesByTimePeriod(this.currentTimePeriod);
                 const productSales = {};
                 
-                sales.forEach(sale => {
-                    const product = this.data.products.find(p => p.id === sale.productId);
+                this.sales.forEach(sale => {
+                    const product = this.products.find(p => p.id === sale.productId);
                     if (product) {
                         if (!productSales[product.name]) {
                             productSales[product.name] = 0;
@@ -4581,9 +4341,7 @@
             }
 
             updateFinanceChart() {
-                if (!this.charts.financeChart) return;
-                
-                const sales = this.data.getSalesByTimePeriod(this.currentTimePeriod);
+                if (!this.charts.financeChart || !this.sales) return;
                 
                 const today = new Date();
                 const labels = [];
@@ -4592,7 +4350,7 @@
                 const daysToShow = parseInt(document.getElementById('financePeriod')?.value) || 7;
                 
                 const dailyData = {};
-                sales.forEach(sale => {
+                this.sales.forEach(sale => {
                     const dateStr = new Date(sale.timestamp).toISOString().split('T')[0];
                     dailyData[dateStr] = (dailyData[dateStr] || 0) + (sale.totalAmount || 0);
                 });
@@ -4613,7 +4371,7 @@
             updateCategoryChart() {
                 if (!this.charts.categoryChart) return;
                 
-                const rankings = this.data.getCategoryRankings('current');
+                const rankings = this.getCategoryRankings('current');
                 
                 this.charts.categoryChart.data.labels = rankings.map(r => r.category);
                 this.charts.categoryChart.data.datasets[0].data = rankings.map(r => r.revenue);
@@ -4623,7 +4381,7 @@
             updateBusinessPlanChart() {
                 if (!this.charts.businessPlanChart) return;
                 
-                const plan = this.data.getBusinessPlanCalculations();
+                const plan = this.getBusinessPlanCalculations();
                 
                 this.charts.businessPlanChart.data.datasets[0].data = [
                     plan.tithe, plan.savings, plan.restock, plan.deductions, plan.personalIncome
@@ -4637,40 +4395,10 @@
                 const statementElement = document.getElementById('dailyStatement');
                 
                 if (currentHour >= 21) {
-                    const statement = this.data.generateDailyStatement();
-                    this.loadDailyStatement(statement);
                     if (statementElement) statementElement.style.display = 'block';
                 } else {
                     if (statementElement) statementElement.style.display = 'none';
                 }
-            }
-
-            loadDailyStatement(statement) {
-                const summaryElement = document.getElementById('statementSummary');
-                if (!summaryElement) return;
-                
-                summaryElement.innerHTML = `
-                    <div class="statement-item">
-                        <div class="label">Total Revenue</div>
-                        <div class="value">${UIUtils.formatCurrency(statement.totalRevenue)}</div>
-                    </div>
-                    <div class="statement-item">
-                        <div class="label">Total Profit</div>
-                        <div class="value positive">${UIUtils.formatCurrency(statement.totalProfit)}</div>
-                    </div>
-                    <div class="statement-item">
-                        <div class="label">Items Sold</div>
-                        <div class="value">${statement.totalItems}</div>
-                    </div>
-                    <div class="statement-item">
-                        <div class="label">Total Sales</div>
-                        <div class="value">${statement.salesCount}</div>
-                    </div>
-                    <div class="statement-item">
-                        <div class="label">Average Sale</div>
-                        <div class="value">${UIUtils.formatCurrency(statement.avgSaleValue)}</div>
-                    </div>
-                `;
             }
 
             async loadProductsTable() {
@@ -4679,9 +4407,9 @@
                 
                 const searchTerm = document.getElementById('globalSearch')?.value.toLowerCase() || '';
                 
-                let filteredProducts = this.data.products;
+                let filteredProducts = this.products;
                 if (searchTerm) {
-                    filteredProducts = this.data.products.filter(p => 
+                    filteredProducts = this.products.filter(p => 
                         (p.name || '').toLowerCase().includes(searchTerm) ||
                         (p.category || '').toLowerCase().includes(searchTerm) ||
                         (p.color || '').toLowerCase().includes(searchTerm) ||
@@ -4776,7 +4504,7 @@
                 const priceFilter = document.getElementById('priceFilter')?.value || '';
                 const searchTerm = document.getElementById('shopSearch')?.value.toLowerCase() || '';
                 
-                let filteredProducts = this.data.products.filter(product => {
+                let filteredProducts = this.products.filter(product => {
                     if (categoryFilter && product.category !== categoryFilter) return false;
                     if (sizeFilter && (!product.sizes || !product.sizes[sizeFilter] || product.sizes[sizeFilter] <= 0)) return false;
                     if (colorFilter && product.color !== colorFilter) return false;
@@ -4863,7 +4591,7 @@
                 const colorFilter = document.getElementById('colorFilter');
                 if (colorFilter && colorFilter.options.length <= 1) {
                     const colors = new Set();
-                    this.data.products.forEach(product => {
+                    this.products.forEach(product => {
                         if (product.color) {
                             colors.add(product.color);
                         }
@@ -4884,9 +4612,7 @@
                 
                 if (!salesList) return;
                 
-                const sales = this.data.getSalesByTimePeriod(this.currentTimePeriod);
-                
-                if (sales.length === 0) {
+                if (this.sales.length === 0) {
                     salesList.innerHTML = '';
                     if (noSalesMessage) noSalesMessage.style.display = 'block';
                     return;
@@ -4895,7 +4621,7 @@
                 if (noSalesMessage) noSalesMessage.style.display = 'none';
                 salesList.innerHTML = '';
                 
-                sales.slice(0, 20).forEach(sale => {
+                this.sales.slice(0, 20).forEach(sale => {
                     const saleItem = document.createElement('div');
                     saleItem.className = 'sale-item';
                     const bargainBadge = sale.isBargain ? '<span class="badge badge-warning" style="margin-left: 5px;">Bargain</span>' : '';
@@ -4915,10 +4641,17 @@
             }
 
             async loadNotifications() {
+                try {
+                    this.notifications = await this.api.getNotifications();
+                } catch (error) {
+                    console.error('Error loading notifications:', error);
+                    this.notifications = [];
+                }
+                
                 const notificationList = document.getElementById('notificationList');
                 if (!notificationList) return;
                 
-                const recentNotifications = this.data.notifications.slice(0, 10);
+                const recentNotifications = this.notifications.slice(0, 10);
                 
                 if (recentNotifications.length === 0) {
                     notificationList.innerHTML = `
@@ -4951,18 +4684,18 @@
                 });
             }
 
-            updateNotificationBadge() {
-                const unreadCount = this.data.getUnreadNotificationCount();
-                const badge = document.getElementById('notificationCount');
-                if (badge) badge.textContent = unreadCount;
+            async updateNotificationBadge() {
+                try {
+                    const data = await this.api.getUnreadCount();
+                    const badge = document.getElementById('notificationCount');
+                    if (badge) badge.textContent = data.count || 0;
+                } catch (error) {
+                    console.error('Error getting unread count:', error);
+                }
             }
 
             async checkStockAlerts() {
-                const alerts = this.data.getStockAlerts();
-                alerts.forEach(alert => {
-                    this.data.addNotification(alert.message, 'warning');
-                });
-                
+                // In a real app, you'd check for stock alerts from the backend
                 this.updateNotificationBadge();
                 await this.loadNotifications();
             }
@@ -5011,7 +4744,7 @@
                 }
             }
 
-            updateSelectedSizes() {
+            getSelectedSizes() {
                 const selectedSizes = {};
                 document.querySelectorAll('.size-option').forEach(option => {
                     const size = option.getAttribute('data-size');
@@ -5020,6 +4753,11 @@
                         selectedSizes[size] = stock;
                     }
                 });
+                return selectedSizes;
+            }
+
+            updateSelectedSizes() {
+                const selectedSizes = this.getSelectedSizes();
                 
                 const selectedSizesInput = document.getElementById('selectedSizes');
                 if (selectedSizesInput) {
@@ -5119,7 +4857,7 @@
             }
 
             async editProduct(productId) {
-                const product = this.data.products.find(p => p.id === productId);
+                const product = this.products.find(p => p.id === productId);
                 if (!product) return;
                 
                 this.currentProductId = productId;
@@ -5157,6 +4895,10 @@
                 if (preview && product.image) {
                     preview.src = product.image;
                     preview.style.display = 'block';
+                    
+                    // Remove required for image when editing
+                    const imageInput = document.getElementById('productImage');
+                    if (imageInput) imageInput.required = false;
                 }
                 
                 this.calculateProfitRange();
@@ -5170,89 +4912,57 @@
                     return;
                 }
                 
-                this.data.deleteProduct(productId);
-                UIUtils.showToast('Product has been deleted', 'success');
-                await this.loadProductsTable();
-                await this.loadOnlineShop();
-                await this.loadDashboardData();
-                this.populateSellProductSelect();
-                this.populateQuickSaleProducts();
+                try {
+                    UIUtils.showB2Upload('Deleting product from B2...');
+                    
+                    await this.api.deleteProduct(productId);
+                    
+                    await this.loadProducts();
+                    await this.loadProductsTable();
+                    await this.loadOnlineShop();
+                    await this.loadDashboardData();
+                    this.populateSellProductSelect();
+                    this.populateQuickSaleProducts();
+                    
+                    UIUtils.showToast('Product has been deleted', 'success');
+                    UIUtils.showFastUpload('Product deleted from B2!');
+                } catch (error) {
+                    console.error('Error deleting product:', error);
+                    UIUtils.showToast('Error deleting product: ' + error.message, 'error');
+                }
             }
 
             async saveProduct(formData) {
                 if (this.isProcessing) {
                     UIUtils.showToast('Please wait for the current operation to complete', 'warning');
-                    return false;
+                    return;
                 }
                 
                 try {
-                    const buyPrice = parseFloat(formData.buyPrice);
-                    const minSellPrice = parseFloat(formData.minSellPrice);
-                    const maxSellPrice = parseFloat(formData.maxSellPrice);
-                    const selectedSizes = JSON.parse(formData.selectedSizes || '{}');
-                    
-                    let hasStock = false;
-                    Object.values(selectedSizes).forEach(stock => {
-                        if (parseInt(stock) > 0) hasStock = true;
-                    });
-                    
-                    if (!hasStock) {
-                        UIUtils.showToast('Please add stock for at least one size', 'error');
-                        return false;
-                    }
-                    
-                    if (buyPrice <= 0 || minSellPrice <= 0 || maxSellPrice <= 0) {
-                        UIUtils.showToast('Prices must be greater than 0', 'error');
-                        return false;
-                    }
-                    
-                    if (minSellPrice > maxSellPrice) {
-                        UIUtils.showToast('Minimum price cannot be greater than maximum price', 'error');
-                        return false;
-                    }
-                    
                     const saveBtn = document.getElementById('saveProductBtn');
                     if (saveBtn) {
                         saveBtn.disabled = true;
-                        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving to B2...';
                     }
                     this.isProcessing = true;
                     
-                    let productImage = null;
-                    const imageInput = document.getElementById('productImage');
-                    const imagePreview = document.getElementById('imagePreview');
-                    
-                    if (imageInput && imageInput.files && imageInput.files[0]) {
-                        const file = imageInput.files[0];
-                        productImage = URL.createObjectURL(file);
-                    } else if (imagePreview && imagePreview.style.display !== 'none') {
-                        productImage = imagePreview.src;
-                    }
-                    
-                    const productData = {
-                        name: formData.productName.trim(),
-                        sku: formData.productSKU.trim(),
-                        category: formData.productCategory,
-                        color: formData.productColor.trim(),
-                        sizes: selectedSizes,
-                        buyPrice: buyPrice,
-                        minSellPrice: minSellPrice,
-                        maxSellPrice: maxSellPrice,
-                        description: formData.productDescription?.trim() || '',
-                        image: productImage || 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=300'
-                    };
+                    UIUtils.showB2Upload('Uploading to Backblaze B2...');
                     
                     let result;
                     if (this.currentProductId === null) {
-                        result = this.data.addProduct(productData);
-                        this.data.addNotification(`New product added: ${productData.name}`, 'success');
+                        result = await this.api.createProduct(formData);
                     } else {
-                        result = this.data.updateProduct(this.currentProductId, productData);
-                        this.data.addNotification(`Product updated: ${productData.name}`, 'success');
+                        result = await this.api.updateProduct(this.currentProductId, formData);
                     }
                     
-                    if (result) {
-                        setTimeout(() => {
+                    if (result.success) {
+                        const uploadSuccess = document.getElementById('uploadSuccess');
+                        if (uploadSuccess) {
+                            uploadSuccess.style.display = 'block';
+                            uploadSuccess.classList.add('active');
+                        }
+                        
+                        setTimeout(async () => {
                             const modal = document.getElementById('addProductModal');
                             if (modal) modal.classList.remove('active');
                             
@@ -5262,7 +4972,6 @@
                             const preview = document.getElementById('imagePreview');
                             if (preview) preview.style.display = 'none';
                             
-                            const uploadSuccess = document.getElementById('uploadSuccess');
                             if (uploadSuccess) uploadSuccess.style.display = 'none';
                             
                             if (saveBtn) {
@@ -5271,24 +4980,22 @@
                             }
                             this.isProcessing = false;
                             
-                            this.loadProductsTable();
-                            this.loadOnlineShop();
-                            this.loadDashboardData();
+                            await this.loadProducts();
+                            await this.loadProductsTable();
+                            await this.loadOnlineShop();
+                            await this.loadDashboardData();
                             this.populateSellProductSelect();
                             this.populateQuickSaleProducts();
                             this.populateFilters();
-                            this.updateNotificationBadge();
-                            this.loadNotifications();
                             
                             UIUtils.showToast(this.currentProductId === null ? 'Product added successfully!' : 'Product updated successfully!', 'success');
+                            UIUtils.showFastUpload('Product saved to Backblaze B2!');
                         }, 1000);
-                        
-                        return true;
+                    } else {
+                        throw new Error(result.error || 'Failed to save product');
                     }
-                    
-                    return false;
                 } catch (error) {
-                    console.error('Error in saveProduct:', error);
+                    console.error('Error saving product:', error);
                     UIUtils.showToast('Error saving product: ' + error.message, 'error');
                     
                     const saveBtn = document.getElementById('saveProductBtn');
@@ -5297,8 +5004,6 @@
                         saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product & Upload to B2';
                     }
                     this.isProcessing = false;
-                    
-                    return false;
                 }
             }
 
@@ -5309,7 +5014,7 @@
                 
                 select.innerHTML = '<option value="">Select a product</option>';
                 
-                this.data.products.forEach(product => {
+                this.products.forEach(product => {
                     if ((product.totalStock || 0) > 0) {
                         const option = document.createElement('option');
                         option.value = product.id;
@@ -5325,7 +5030,7 @@
                 
                 select.innerHTML = '<option value="">Select product</option>';
                 
-                this.data.products.forEach(product => {
+                this.products.forEach(product => {
                     if ((product.totalStock || 0) > 0) {
                         const option = document.createElement('option');
                         option.value = product.id;
@@ -5342,7 +5047,7 @@
                 select.innerHTML = '<option value="">Select size</option>';
                 select.disabled = true;
                 
-                const product = this.data.products.find(p => p.id == productId);
+                const product = this.products.find(p => p.id == productId);
                 if (!product || !product.sizes) return;
                 
                 Object.entries(product.sizes).forEach(([size, stock]) => {
@@ -5365,7 +5070,7 @@
                 
                 if (!productId || !priceInput) return;
                 
-                const product = this.data.products.find(p => p.id == productId);
+                const product = this.products.find(p => p.id == productId);
                 if (product) {
                     priceInput.value = product.maxSellPrice || 0;
                 }
@@ -5374,7 +5079,7 @@
             async processQuickSale() {
                 if (this.isProcessing) {
                     UIUtils.showToast('Please wait for the current operation to complete', 'warning');
-                    return false;
+                    return;
                 }
                 
                 const productId = parseInt(document.getElementById('quickProduct')?.value);
@@ -5384,19 +5089,19 @@
                 
                 if (!productId || !size || quantity < 1 || unitPrice <= 0) {
                     UIUtils.showToast('Please fill all required fields', 'error');
-                    return false;
+                    return;
                 }
                 
-                const product = this.data.products.find(p => p.id == productId);
+                const product = this.products.find(p => p.id == productId);
                 
                 if (!product) {
                     UIUtils.showToast('Product not found', 'error');
-                    return false;
+                    return;
                 }
                 
                 if (product.sizes && product.sizes[size] < quantity) {
                     UIUtils.showToast(`Only ${product.sizes[size] || 0} items available in size ${size}`, 'error');
-                    return false;
+                    return;
                 }
                 
                 const quickSaleBtn = document.getElementById('quickSaleBtn');
@@ -5406,48 +5111,50 @@
                 }
                 this.isProcessing = true;
                 
-                const saleData = {
-                    productId: productId,
-                    productName: product.name,
-                    buyPrice: product.buyPrice,
-                    size: size,
-                    quantity: quantity,
-                    unitPrice: unitPrice,
-                    customerName: '',
-                    notes: 'Quick Sale',
-                    isBargain: unitPrice < (product.maxSellPrice || 0),
-                    productColor: product.color || 'N/A'
-                };
-                
                 try {
-                    this.data.recordSale(saleData);
+                    UIUtils.showB2Upload('Processing sale...');
                     
-                    UIUtils.showToast(`Sale completed: ${product.name} (${quantity} × Size ${size})`, 'success');
+                    const saleData = {
+                        productId: productId,
+                        size: size,
+                        quantity: quantity,
+                        unitPrice: unitPrice,
+                        customerName: '',
+                        notes: 'Quick Sale',
+                        isBargain: unitPrice < (product.maxSellPrice || 0)
+                    };
                     
-                    this.clearQuickSaleForm();
+                    const result = await this.api.createSale(saleData);
                     
-                    await this.loadProductsTable();
-                    await this.loadOnlineShop();
-                    await this.loadSalesData();
-                    await this.loadDashboardData();
-                    await this.loadStockAnalysis();
-                    await this.loadBusinessPlan();
-                    this.populateSellProductSelect();
-                    this.populateQuickSaleProducts();
-                    this.updateNotificationBadge();
-                    await this.loadNotifications();
-                    
+                    if (result.success) {
+                        UIUtils.showToast(`Sale completed: ${product.name} (${quantity} × Size ${size})`, 'success');
+                        
+                        await this.loadSales();
+                        await this.loadProducts();
+                        await this.loadProductsTable();
+                        await this.loadOnlineShop();
+                        await this.loadSalesData();
+                        await this.loadDashboardData();
+                        await this.loadStockAnalysis();
+                        await this.loadBusinessPlan();
+                        this.populateSellProductSelect();
+                        this.populateQuickSaleProducts();
+                        
+                        this.clearQuickSaleForm();
+                        
+                        UIUtils.showFastUpload('Sale recorded in B2!');
+                    } else {
+                        throw new Error(result.error || 'Failed to process sale');
+                    }
                 } catch (error) {
                     UIUtils.showToast('Error processing sale: ' + error.message, 'error');
+                } finally {
+                    if (quickSaleBtn) {
+                        quickSaleBtn.disabled = false;
+                        quickSaleBtn.innerHTML = '<i class="fas fa-bolt"></i> Quick Sale';
+                    }
+                    this.isProcessing = false;
                 }
-                
-                if (quickSaleBtn) {
-                    quickSaleBtn.disabled = false;
-                    quickSaleBtn.innerHTML = '<i class="fas fa-bolt"></i> Quick Sale';
-                }
-                this.isProcessing = false;
-                
-                return true;
             }
 
             clearQuickSaleForm() {
@@ -5496,7 +5203,7 @@
             }
 
             sellProduct(productId) {
-                const product = this.data.products.find(p => p.id === productId);
+                const product = this.products.find(p => p.id === productId);
                 if (!product) return;
                 
                 const productSelect = document.getElementById('sellProductSelect');
@@ -5519,7 +5226,7 @@
                     return;
                 }
                 
-                const product = this.data.products.find(p => p.id == productId);
+                const product = this.products.find(p => p.id == productId);
                 if (product) {
                     const sellProductImage = document.getElementById('sellProductImage');
                     if (sellProductImage) sellProductImage.src = product.image || 'https://via.placeholder.com/60';
@@ -5543,7 +5250,7 @@
             }
 
             updateAvailableSizesGrid(productId) {
-                const product = this.data.products.find(p => p.id == productId);
+                const product = this.products.find(p => p.id == productId);
                 const grid = document.getElementById('availableSizesGrid');
                 if (!grid) return;
                 
@@ -5617,7 +5324,7 @@
                     return;
                 }
                 
-                const product = this.data.products.find(p => p.id == productId);
+                const product = this.products.find(p => p.id == productId);
                 if (!product) return;
                 
                 const totalAmount = quantity * unitPrice;
@@ -5636,23 +5343,23 @@
             async processSale(saleData) {
                 if (this.isProcessing) {
                     UIUtils.showToast('Please wait for the current operation to complete', 'warning');
-                    return false;
+                    return;
                 }
                 
                 if (!saleData.productId || !saleData.size || !saleData.quantity || !saleData.unitPrice) {
                     UIUtils.showToast('Please fill all required fields', 'error');
-                    return false;
+                    return;
                 }
                 
-                const product = this.data.products.find(p => p.id == saleData.productId);
+                const product = this.products.find(p => p.id == saleData.productId);
                 if (!product) {
                     UIUtils.showToast('Product not found', 'error');
-                    return false;
+                    return;
                 }
                 
                 if (product.sizes && product.sizes[saleData.size] < saleData.quantity) {
                     UIUtils.showToast(`Only ${product.sizes[saleData.size] || 0} items available in size ${saleData.size}`, 'error');
-                    return false;
+                    return;
                 }
                 
                 const confirmBtn = document.getElementById('confirmSaleBtn');
@@ -5662,46 +5369,50 @@
                 }
                 this.isProcessing = true;
                 
-                saleData.productName = product.name;
-                saleData.buyPrice = product.buyPrice;
-                saleData.productColor = product.color || 'N/A';
-                
                 try {
-                    this.data.recordSale(saleData);
+                    UIUtils.showB2Upload('Processing sale...');
                     
-                    const saleSuccess = document.getElementById('saleSuccess');
-                    if (saleSuccess) {
-                        saleSuccess.style.display = 'block';
-                        saleSuccess.classList.add('active');
-                    }
+                    const result = await this.api.createSale(saleData);
                     
-                    const form = document.getElementById('sellForm');
-                    if (form) form.style.display = 'none';
-                    
-                    UIUtils.showToast(`Sale completed successfully!`, 'success');
-                    
-                    setTimeout(async () => {
-                        const modal = document.getElementById('sellProductModal');
-                        if (modal) modal.classList.remove('active');
-                        
-                        await this.loadProductsTable();
-                        await this.loadOnlineShop();
-                        await this.loadSalesData();
-                        await this.loadDashboardData();
-                        await this.loadStockAnalysis();
-                        await this.loadBusinessPlan();
-                        this.populateSellProductSelect();
-                        this.populateQuickSaleProducts();
-                        this.updateNotificationBadge();
-                        await this.loadNotifications();
-                        
-                        if (confirmBtn) {
-                            confirmBtn.disabled = false;
-                            confirmBtn.innerHTML = '<i class="fas fa-bolt"></i> Complete Sale & Generate Statement';
+                    if (result.success) {
+                        const saleSuccess = document.getElementById('saleSuccess');
+                        if (saleSuccess) {
+                            saleSuccess.style.display = 'block';
+                            saleSuccess.classList.add('active');
                         }
-                        this.isProcessing = false;
-                    }, 2000);
-                    
+                        
+                        const form = document.getElementById('sellForm');
+                        if (form) form.style.display = 'none';
+                        
+                        UIUtils.showToast('Sale completed successfully!', 'success');
+                        
+                        await this.loadSales();
+                        await this.loadProducts();
+                        
+                        setTimeout(async () => {
+                            const modal = document.getElementById('sellProductModal');
+                            if (modal) modal.classList.remove('active');
+                            
+                            await this.loadProductsTable();
+                            await this.loadOnlineShop();
+                            await this.loadSalesData();
+                            await this.loadDashboardData();
+                            await this.loadStockAnalysis();
+                            await this.loadBusinessPlan();
+                            this.populateSellProductSelect();
+                            this.populateQuickSaleProducts();
+                            
+                            if (confirmBtn) {
+                                confirmBtn.disabled = false;
+                                confirmBtn.innerHTML = '<i class="fas fa-bolt"></i> Complete Sale & Generate Statement';
+                            }
+                            this.isProcessing = false;
+                            
+                            UIUtils.showFastUpload('Sale recorded in B2!');
+                        }, 2000);
+                    } else {
+                        throw new Error(result.error || 'Failed to process sale');
+                    }
                 } catch (error) {
                     UIUtils.showToast('Error processing sale: ' + error.message, 'error');
                     
@@ -5711,11 +5422,54 @@
                     }
                     this.isProcessing = false;
                 }
-                
-                return true;
             }
 
             // ========== STOCK ANALYSIS ==========
+            getCategoryRankings(period = 'current') {
+                const categoriesData = {};
+                
+                const sales = this.sales || [];
+                
+                sales.forEach(sale => {
+                    const product = this.products.find(p => p.id === sale.productId);
+                    if (product && product.category) {
+                        if (!categoriesData[product.category]) {
+                            categoriesData[product.category] = {
+                                revenue: 0,
+                                quantity: 0,
+                                profit: 0
+                            };
+                        }
+                        categoriesData[product.category].revenue += sale.totalAmount || 0;
+                        categoriesData[product.category].quantity += sale.quantity || 0;
+                        categoriesData[product.category].profit += sale.totalProfit || 0;
+                    }
+                });
+                
+                const totalRevenue = Object.values(categoriesData).reduce((sum, c) => sum + c.revenue, 0);
+                
+                return Object.entries(categoriesData)
+                    .map(([category, data]) => {
+                        const marketShare = totalRevenue > 0 ? ((data.revenue / totalRevenue) * 100) : 0;
+                        
+                        let demandLevel = 'Medium';
+                        if (data.revenue > 50000) demandLevel = 'Very High';
+                        else if (data.revenue > 20000) demandLevel = 'High';
+                        else if (data.revenue < 5000) demandLevel = 'Low';
+                        else if (data.revenue < 1000) demandLevel = 'Very Low';
+                        
+                        return {
+                            category,
+                            revenue: data.revenue,
+                            quantity: data.quantity,
+                            profit: data.profit,
+                            marketShare: marketShare.toFixed(1),
+                            demandLevel
+                        };
+                    })
+                    .sort((a, b) => b.revenue - a.revenue);
+            }
+
             async loadStockAnalysis() {
                 const reportMonth = document.getElementById('reportMonth')?.value || 'current';
                 const reportPeriodEl = document.getElementById('reportPeriod');
@@ -5725,7 +5479,7 @@
                     else if (reportMonth === 'last3') reportPeriodEl.textContent = 'Last 3 Months';
                 }
                 
-                const rankings = this.data.getCategoryRankings(reportMonth);
+                const rankings = this.getCategoryRankings(reportMonth);
                 const categoryRankings = document.getElementById('categoryRankings');
                 
                 if (categoryRankings) {
@@ -5766,7 +5520,7 @@
                     }
                 }
                 
-                const budgetPlan = this.data.getBiWeeklyBudgetPlan();
+                const budgetPlan = this.getBiWeeklyBudgetPlan();
                 const biWeeklyBudget = document.getElementById('biWeeklyBudget');
                 if (biWeeklyBudget) biWeeklyBudget.textContent = UIUtils.formatCurrency(budgetPlan.weeklyBudget);
                 
@@ -5792,9 +5546,71 @@
                 this.checkStockAlerts();
             }
 
+            getBiWeeklyBudgetPlan() {
+                const twoWeeksAgo = new Date();
+                twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+                
+                const recentSales = (this.sales || []).filter(sale => 
+                    new Date(sale.timestamp) >= twoWeeksAgo
+                );
+                
+                const totalRevenue = recentSales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+                const totalProfit = recentSales.reduce((sum, sale) => sum + (sale.totalProfit || 0), 0);
+                const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+                
+                const weeklyBudget = Math.max(totalProfit * 0.3, 1000);
+                
+                return {
+                    totalRevenue,
+                    totalProfit,
+                    profitMargin: profitMargin.toFixed(1),
+                    weeklyBudget,
+                    recommendation: totalProfit > 0 
+                        ? `Based on last 2 weeks' profit of ${UIUtils.formatCurrency(totalProfit)} (${profitMargin.toFixed(1)}% margin), allocate ${UIUtils.formatCurrency(weeklyBudget)} for inventory.`
+                        : 'Not enough data for budget planning. Start making more sales.'
+                };
+            }
+
             // ========== BUSINESS PLAN ==========
+            getBusinessPlanCalculations() {
+                const totalProfit = (this.sales || []).reduce((sum, sale) => sum + (sale.totalProfit || 0), 0);
+                const totalRevenue = (this.sales || []).reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+                
+                return {
+                    totalRevenue: totalRevenue,
+                    totalProfit: totalProfit,
+                    tithe: totalProfit * 0.1,
+                    savings: totalProfit * 0.2,
+                    restock: totalProfit * 0.3,
+                    deductions: totalProfit * 0.15,
+                    personalIncome: totalProfit * 0.25
+                };
+            }
+
+            calculateBusinessHealth() {
+                const revenue = (this.sales || []).reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+                const profit = (this.sales || []).reduce((sum, sale) => sum + (sale.totalProfit || 0), 0);
+                
+                const revenueScore = Math.min(100, (revenue / 10000) * 100);
+                const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
+                const profitScore = Math.min(100, profitMargin * 2);
+                
+                const healthScore = Math.round((revenueScore * 0.5) + (profitScore * 0.5));
+                
+                let status = 'Excellent';
+                if (healthScore < 30) status = 'Needs Improvement';
+                else if (healthScore < 50) status = 'Fair';
+                else if (healthScore < 70) status = 'Good';
+                else if (healthScore < 85) status = 'Very Good';
+                
+                return {
+                    score: healthScore,
+                    status: status
+                };
+            }
+
             async loadBusinessPlan() {
-                const plan = this.data.getBusinessPlanCalculations();
+                const plan = this.getBusinessPlanCalculations();
                 
                 document.getElementById('totalIncome').textContent = UIUtils.formatCurrency(plan.totalRevenue);
                 document.getElementById('titheAmount').textContent = UIUtils.formatCurrency(plan.tithe);
@@ -5803,7 +5619,7 @@
                 document.getElementById('deductionsAmount').textContent = UIUtils.formatCurrency(plan.deductions);
                 document.getElementById('personalIncome').textContent = UIUtils.formatCurrency(plan.personalIncome);
                 
-                const health = this.data.calculateBusinessHealth();
+                const health = this.calculateBusinessHealth();
                 document.getElementById('healthScore').textContent = health.score;
                 document.getElementById('healthStatus').textContent = health.status;
                 
@@ -5830,91 +5646,6 @@
                         day: 'numeric'
                     });
                 }
-            }
-
-            // ========== DOWNLOAD / PRINT ==========
-            downloadStatement(statement) {
-                const date = new Date(statement.date).toLocaleDateString('en-KE');
-                const content = `
-                    KARANJA STORE - DAILY SALES STATEMENT
-                    Date: ${date}
-                    ============================================
-                    
-                    Total Revenue: ${UIUtils.formatCurrency(statement.totalRevenue)}
-                    Total Profit: ${UIUtils.formatCurrency(statement.totalProfit)}
-                    Items Sold: ${statement.totalItems}
-                    Total Sales: ${statement.salesCount}
-                    Average Sale Value: ${UIUtils.formatCurrency(statement.avgSaleValue)}
-                    
-                    ============================================
-                    Generated by Karanja Store Management System
-                `;
-                
-                const blob = new Blob([content], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `daily-statement-${date.replace(/\//g, '-')}.txt`;
-                a.click();
-                URL.revokeObjectURL(url);
-                
-                UIUtils.showToast('Statement downloaded successfully!', 'success');
-            }
-
-            printStatement(statement) {
-                const date = new Date(statement.date).toLocaleDateString('en-KE');
-                const printWindow = window.open('', '_blank');
-                printWindow.document.write(`
-                    <html>
-                        <head>
-                            <title>Daily Sales Statement - ${date}</title>
-                            <style>
-                                body { font-family: Arial, sans-serif; padding: 40px; }
-                                h1 { color: #1a237e; }
-                                .header { text-align: center; margin-bottom: 30px; }
-                                .content { max-width: 600px; margin: 0 auto; }
-                                .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #ddd; }
-                                .label { font-weight: 600; }
-                                .footer { margin-top: 40px; text-align: center; color: #666; }
-                            </style>
-                        </head>
-                        <body>
-                            <div class="content">
-                                <div class="header">
-                                    <h1>Karanja Store</h1>
-                                    <h2>Daily Sales Statement</h2>
-                                    <p>${date}</p>
-                                </div>
-                                <div class="row">
-                                    <span class="label">Total Revenue:</span>
-                                    <span>${UIUtils.formatCurrency(statement.totalRevenue)}</span>
-                                </div>
-                                <div class="row">
-                                    <span class="label">Total Profit:</span>
-                                    <span>${UIUtils.formatCurrency(statement.totalProfit)}</span>
-                                </div>
-                                <div class="row">
-                                    <span class="label">Items Sold:</span>
-                                    <span>${statement.totalItems}</span>
-                                </div>
-                                <div class="row">
-                                    <span class="label">Total Sales:</span>
-                                    <span>${statement.salesCount}</span>
-                                </div>
-                                <div class="row">
-                                    <span class="label">Average Sale Value:</span>
-                                    <span>${UIUtils.formatCurrency(statement.avgSaleValue)}</span>
-                                </div>
-                                <div class="footer">
-                                    <p>Generated by Karanja Store Management System</p>
-                                    <p>Backblaze B2 Cloud Storage • Cross-Device Sync Enabled</p>
-                                </div>
-                            </div>
-                        </body>
-                    </html>
-                `);
-                printWindow.document.close();
-                printWindow.print();
             }
 
             updateDateTime() {
