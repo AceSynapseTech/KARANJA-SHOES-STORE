@@ -37,25 +37,24 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('static', exist_ok=True)
 
 # ==================== BACKBLAZE B2 CONFIGURATION ====================
-# IMPORTANT: You need to get your correct Application Key from Backblaze B2
-# Go to Backblaze B2 Console -> App Keys -> Create a new application key with write access
+# NEW BUCKET CONFIGURATION - Created February 13, 2026
 B2_CONFIG = {
     # BUCKET INFORMATION
-    'BUCKET_NAME': 'karanja-shoe-store',
-    'BUCKET_ID': 'e318a1c1ef68e53f99b8001c',
+    'BUCKET_NAME': 'karanjastores',  # New bucket name
+    'BUCKET_ID': 'd33891d14fc8555f99c8001c',  # New bucket ID
     'ENDPOINT': 's3.eu-central-003.backblazeb2.com',
     'REGION': 'eu-central-003',
-    'CDN_URL': 'https://f005.backblazeb2.com/file/karanja-shoe-store',
-    'CREATED_DATE': 'January 22, 2026',
+    'CDN_URL': 'https://f005.backblazeb2.com/file/karanjastores',  # Updated CDN URL
+    'CREATED_DATE': 'February 13, 2026',
     
-    # MASTER APPLICATION KEY - UPDATE THESE WITH CORRECT VALUES FROM B2 CONSOLE
-    'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', ''),  # Get from environment variable
-    'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', ''),  # Get from environment variable
+    # MASTER APPLICATION KEY - CORRECT CREDENTIALS
+    'ACCESS_KEY_ID': '0033811f85f980c0000000002',  # Your correct keyID
+    'SECRET_ACCESS_KEY': 'K003/3EbNC05LDHhaVS94Z3z27nuUDU',  # Your correct applicationKey
     
     # BUCKET STATUS
     'TYPE': 'Private',
-    'CURRENT_FILES': 14,
-    'CURRENT_SIZE': '24.3 MB',
+    'CURRENT_FILES': 0,
+    'CURRENT_SIZE': '0 bytes',
     
     # DATA STORAGE PATHS IN B2
     'DATA_PATHS': {
@@ -72,27 +71,23 @@ B2_CONFIG = {
     }
 }
 
-# Initialize B2 client only if credentials are provided
-b2_client = None
-if B2_CONFIG['ACCESS_KEY_ID'] and B2_CONFIG['SECRET_ACCESS_KEY']:
-    try:
-        b2_client = boto3.client(
-            's3',
-            endpoint_url=f'https://{B2_CONFIG["ENDPOINT"]}',
-            aws_access_key_id=B2_CONFIG['ACCESS_KEY_ID'],
-            aws_secret_access_key=B2_CONFIG['SECRET_ACCESS_KEY'],
-            config=Config(
-                signature_version='s3v4',
-                region_name=B2_CONFIG['REGION'],
-                retries={'max_attempts': 3}
-            )
+# Initialize Backblaze B2 client with correct credentials
+try:
+    b2_client = boto3.client(
+        's3',
+        endpoint_url=f'https://{B2_CONFIG["ENDPOINT"]}',
+        aws_access_key_id=B2_CONFIG['ACCESS_KEY_ID'],
+        aws_secret_access_key=B2_CONFIG['SECRET_ACCESS_KEY'],
+        config=Config(
+            signature_version='s3v4',
+            region_name=B2_CONFIG['REGION'],
+            retries={'max_attempts': 3}
         )
-        logger.info("B2 client initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize B2 client: {e}")
-        b2_client = None
-else:
-    logger.warning("B2 credentials not provided. Running in local storage mode.")
+    )
+    logger.info("✓ Backblaze B2 client initialized successfully with bucket: karanjastores")
+except Exception as e:
+    logger.error(f"✗ Failed to initialize B2 client: {e}")
+    b2_client = None
 
 # ==================== EXTENSIONS ====================
 CORS(app, resources={
@@ -305,6 +300,7 @@ class B2DataStore:
             return json.loads(content) if content.strip() else {}
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
+                logger.info(f"Creating new data file: {b2_key}")
                 return {}
             logger.error(f"Error reading {b2_key} from B2: {e}")
             return {}
@@ -485,10 +481,10 @@ class B2DataStore:
 # Initialize Data Store (use B2 if available, otherwise use local)
 if b2_client:
     data_store = B2DataStore(b2_client, B2_CONFIG['BUCKET_NAME'])
-    logger.info("Using Backblaze B2 for data storage")
+    logger.info("✓ Using Backblaze B2 for data storage with bucket: karanjastores")
 else:
     data_store = LocalDataStore()
-    logger.info("Using local storage for data (B2 not configured)")
+    logger.warning("⚠ Using local storage for data (B2 not configured)")
 
 # Initialize default admin if no users exist
 if not data_store.users:
@@ -502,7 +498,7 @@ if not data_store.users:
         'created_at': datetime.now().isoformat()
     }]
     data_store.save_users()
-    logger.info("Created default admin user")
+    logger.info("✓ Created default admin user")
 
 # ==================== BACKBLAZE B2 HELPER FUNCTIONS ====================
 def generate_signed_url(s3_key, expiration=604800):
@@ -551,7 +547,7 @@ def extract_s3_key_from_url(url):
 def upload_to_b2():
     """Upload image to Backblaze B2 Private Bucket"""
     if not b2_client:
-        return jsonify({'error': 'Backblaze B2 is not configured. Please set B2 credentials.'}), 503
+        return jsonify({'error': 'Backblaze B2 is not configured properly'}), 503
     
     try:
         if 'image' not in request.files:
@@ -589,6 +585,8 @@ def upload_to_b2():
                 }
             }
         )
+        
+        logger.info(f"✓ Successfully uploaded image to B2: {s3_key}")
         
         # Generate signed URL
         signed_url = generate_signed_url(s3_key, expiration=604800)
@@ -1087,7 +1085,8 @@ def get_dashboard_stats():
             'todayProfit': today_profit,
             'todayItems': today_items,
             'salesCount': len(sales),
-            'storage_type': 'b2' if b2_client else 'local'
+            'storage_type': 'b2' if b2_client else 'local',
+            'bucket_name': B2_CONFIG['BUCKET_NAME'] if b2_client else 'local'
         }), 200
         
     except Exception as e:
@@ -1392,22 +1391,23 @@ def init_sample_data():
                     draw = ImageDraw.Draw(img)
                     draw.text((150, 150), "No Image", fill="white", anchor="mm")
                     img.save(placeholder_path)
-                    logger.info("Created placeholder image")
+                    logger.info("✓ Created placeholder image")
                 except ImportError:
-                    logger.warning("PIL not installed, skipping placeholder creation")
+                    logger.warning("⚠ PIL not installed, skipping placeholder creation")
             
             # Add welcome notification
             storage_type = 'Backblaze B2' if b2_client else 'Local Storage'
+            bucket_info = f" ({B2_CONFIG['BUCKET_NAME']})" if b2_client else ""
             notification = {
                 'id': int(datetime.now().timestamp() * 1000),
-                'message': f'Welcome to Karanja Shoe Store! Data stored in {storage_type}',
+                'message': f'Welcome to Karanja Shoe Store! Data stored in {storage_type}{bucket_info}',
                 'type': 'info',
                 'timestamp': datetime.now().isoformat(),
                 'read': False
             }
             data_store.notifications.insert(0, notification)
             data_store.save_notifications()
-            logger.info(f"Sample data initialized with {storage_type}")
+            logger.info(f"✓ Sample data initialized with {storage_type}")
     except Exception as e:
         logger.error(f"Error initializing data: {e}")
 
@@ -1420,11 +1420,15 @@ if __name__ == '__main__':
     
     # Print storage status on startup
     if b2_client:
+        logger.info("=" * 60)
         logger.info("✓ Backblaze B2 is configured and connected")
+        logger.info(f"  Bucket Name: {B2_CONFIG['BUCKET_NAME']}")
+        logger.info(f"  Bucket ID: {B2_CONFIG['BUCKET_ID']}")
+        logger.info(f"  Created: {B2_CONFIG['CREATED_DATE']}")
+        logger.info("=" * 60)
     else:
+        logger.warning("=" * 60)
         logger.warning("⚠ Backblaze B2 is not configured. Using local storage.")
-        logger.info("To enable B2 storage, set these environment variables:")
-        logger.info("  export B2_ACCESS_KEY_ID=your_key_id")
-        logger.info("  export B2_SECRET_ACCESS_KEY=your_application_key")
+        logger.warning("=" * 60)
     
     app.run(host='0.0.0.0', port=port, debug=True)
