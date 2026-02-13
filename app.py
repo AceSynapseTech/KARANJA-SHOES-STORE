@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_file, send_from_directory, make_response
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, verify_jwt_in_request
 from datetime import datetime, timedelta
 import json
 import os
@@ -14,6 +14,7 @@ from decimal import Decimal
 import mimetypes
 import logging
 import traceback
+from functools import wraps
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -111,6 +112,20 @@ class CustomJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 app.json_encoder = CustomJSONEncoder
+
+# ==================== OPTIONAL JWT DECORATOR ====================
+def optional_jwt_required():
+    """Decorator that doesn't require JWT but will set current_user if valid"""
+    def wrapper(fn):
+        @wraps(fn)
+        def decorator(*args, **kwargs):
+            try:
+                verify_jwt_in_request(optional=True)
+            except Exception as e:
+                logger.debug(f"JWT verification failed (optional): {e}")
+            return fn(*args, **kwargs)
+        return decorator
+    return wrapper
 
 # ==================== B2 DATA STORAGE MANAGER ====================
 class B2DataStore:
@@ -326,11 +341,178 @@ if not data_store.users:
     data_store.save_users()
     logger.info("✓ Created default admin user in B2")
 
-# ==================== PASSWORD CHANGE ROUTE ====================
+# Initialize KARANJASHOESTORE@GMAIL.COM user if not exists
+karanja_email = 'KARANJASHOESTORE@GMAIL.COM'
+karanja_user = next((u for u in data_store.users if u['email'].upper() == karanja_email), None)
+if not karanja_user:
+    karanja_password = bcrypt.generate_password_hash('0726539216').decode('utf-8')
+    karanja_user_data = {
+        'id': 2,
+        'email': karanja_email,
+        'password': karanja_password,
+        'name': 'Karanja Shoe Store',
+        'role': 'admin',
+        'created_at': datetime.now().isoformat()
+    }
+    data_store.users.append(karanja_user_data)
+    data_store.save_users()
+    logger.info(f"✓ Created user: {karanja_email} with default password")
+else:
+    logger.info(f"✓ User {karanja_email} already exists")
+
+# ==================== PUBLIC ENDPOINTS (NO JWT REQUIRED) ====================
+
+@app.route('/api/public/products', methods=['GET'])
+def get_public_products():
+    """Public endpoint to get products - NO LOGIN REQUIRED"""
+    try:
+        data_store.load_all_data()
+        products = data_store.products
+        
+        products.sort(key=lambda x: x.get('dateAdded', ''), reverse=True)
+        
+        products_copy = []
+        for product in products:
+            product_copy = product.copy()
+            product_copy.pop('buyPrice', None)
+            product_copy.pop('createdBy', None)
+            product_copy.pop('minSellPrice', None)
+            product_copy.pop('maxSellPrice', None)
+            
+            if product.get('s3_key'):
+                fresh_url = generate_signed_url(product['s3_key'], expiration=86400)
+                if fresh_url:
+                    product_copy['image'] = fresh_url
+            
+            products_copy.append(product_copy)
+        
+        return jsonify(products_copy), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting public products: {e}")
+        return jsonify([]), 200
+
+@app.route('/api/public/health', methods=['GET'])
+def public_health_check():
+    """Public health check endpoint - NO LOGIN REQUIRED"""
+    try:
+        data_store.load_all_data()
+        
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.now().isoformat(),
+            'app': 'Karanja Shoe Store',
+            'b2_bucket': B2_CONFIG['BUCKET_NAME'],
+            'products': len(data_store.products),
+            'sales': len(data_store.sales),
+            'storage_type': 'b2',
+            'cross_device_sync': 'enabled'
+        }), 200
+    except Exception as e:
+        return jsonify({'status': 'degraded', 'error': str(e)}), 200
+
+@app.route('/api/public/b2/info', methods=['GET'])
+def get_public_b2_info():
+    """Public B2 info endpoint - NO LOGIN REQUIRED"""
+    try:
+        return jsonify({
+            'bucketName': B2_CONFIG['BUCKET_NAME'],
+            'created': B2_CONFIG['CREATED_DATE'],
+            'cdn_url': B2_CONFIG['CDN_URL'],
+            'stored_images': len(data_store.b2_images),
+            'connected': True,
+            'storage_type': 'b2'
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting B2 info: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ==================== PASSWORD MANAGEMENT ====================
+
+@app.route('/api/auth/update-karanja-password', methods=['POST'])
+def update_karanja_password():
+    """Special route to update KARANJASHOESTORE@GMAIL.COM password - NO JWT REQUIRED"""
+    try:
+        data = request.get_json()
+        new_password = data.get('newPassword')
+        confirm_password = data.get('confirmPassword')
+        secret_key = data.get('secretKey')
+        
+        # Simple security check
+        if secret_key != 'karanja-update-2026':
+            return jsonify({'error': 'Invalid secret key'}), 401
+        
+        if not new_password or not confirm_password:
+            return jsonify({'error': 'New password and confirmation are required'}), 400
+        
+        if new_password != confirm_password:
+            return jsonify({'error': 'Passwords do not match'}), 400
+        
+        if len(new_password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters long'}), 400
+        
+        data_store.load_all_data()
+        
+        # Find the specific user
+        target_email = 'KARANJASHOESTORE@GMAIL.COM'
+        user_index = -1
+        user = None
+        
+        for i, u in enumerate(data_store.users):
+            if u['email'].upper() == target_email:
+                user_index = i
+                user = u
+                break
+        
+        if not user:
+            # Create user if doesn't exist
+            new_user = {
+                'id': int(datetime.now().timestamp() * 1000),
+                'email': target_email,
+                'password': bcrypt.generate_password_hash(new_password).decode('utf-8'),
+                'name': 'Karanja Shoe Store',
+                'role': 'admin',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
+            data_store.users.append(new_user)
+            save_success = data_store.save_users()
+            
+            if not save_success:
+                return jsonify({'error': 'Failed to create user in B2'}), 500
+            
+            logger.info(f"✓ Created user: {target_email}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'User created and password set successfully'
+            }), 201
+        else:
+            # Update existing user's password
+            user['password'] = bcrypt.generate_password_hash(new_password).decode('utf-8')
+            user['updated_at'] = datetime.now().isoformat()
+            
+            data_store.users[user_index] = user
+            save_success = data_store.save_users()
+            
+            if not save_success:
+                return jsonify({'error': 'Failed to update password in B2'}), 500
+            
+            logger.info(f"✓ Password updated for user: {target_email}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Password updated successfully'
+            }), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating Karanja password: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/auth/change-password', methods=['POST'])
 @jwt_required()
 def change_password():
-    """Change user password"""
+    """Change user password - JWT REQUIRED"""
     try:
         current_user_id = get_jwt_identity()
         data = request.get_json()
@@ -395,92 +577,83 @@ def change_password():
         logger.error(f"Error changing password: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== SPECIFIC USER MANAGEMENT ROUTES ====================
-@app.route('/api/auth/update-karanja-password', methods=['POST'])
-def update_karanja_password():
-    """Special route to update KARANJASHOESTORE@GMAIL.COM password - NO JWT REQUIRED for this specific operation"""
+# ==================== AUTHENTICATION ROUTES ====================
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Authenticate user and return JWT token"""
     try:
         data = request.get_json()
-        new_password = data.get('newPassword')
-        confirm_password = data.get('confirmPassword')
-        secret_key = data.get('secretKey')
+        email = data.get('email')
+        password = data.get('password')
         
-        # Simple security check - you can change this secret key
-        if secret_key != 'karanja-update-2026':
-            return jsonify({'error': 'Invalid secret key'}), 401
-        
-        if not new_password or not confirm_password:
-            return jsonify({'error': 'New password and confirmation are required'}), 400
-        
-        if new_password != confirm_password:
-            return jsonify({'error': 'Passwords do not match'}), 400
-        
-        if len(new_password) < 6:
-            return jsonify({'error': 'Password must be at least 6 characters long'}), 400
+        if not email or not password:
+            return jsonify({'error': 'Email and password required'}), 400
         
         data_store.load_all_data()
+        user = next((u for u in data_store.users if u['email'].lower() == email.lower()), None)
         
-        # Find the specific user
-        target_email = 'KARANJASHOESTORE@GMAIL.COM'
-        user_index = -1
-        user = None
-        
-        for i, u in enumerate(data_store.users):
-            if u['email'].upper() == target_email:
-                user_index = i
-                user = u
-                break
-        
-        # If user doesn't exist, create it
-        if not user:
-            new_user = {
-                'id': int(datetime.now().timestamp() * 1000),
-                'email': target_email,
-                'password': bcrypt.generate_password_hash(new_password).decode('utf-8'),
-                'name': 'Karanja Shoe Store',
-                'role': 'admin',
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
-            }
-            data_store.users.append(new_user)
-            save_success = data_store.save_users()
-            
-            if not save_success:
-                return jsonify({'error': 'Failed to create user in B2'}), 500
-            
-            logger.info(f"✓ Created user: {target_email}")
+        if user and bcrypt.check_password_hash(user['password'], password):
+            access_token = create_access_token(
+                identity=str(user['id']),
+                additional_claims={
+                    'email': user['email'],
+                    'name': user['name'],
+                    'role': user['role']
+                }
+            )
             
             return jsonify({
                 'success': True,
-                'message': 'User created and password set successfully'
-            }), 201
-        else:
-            # Update existing user's password
-            user['password'] = bcrypt.generate_password_hash(new_password).decode('utf-8')
-            user['updated_at'] = datetime.now().isoformat()
-            
-            data_store.users[user_index] = user
-            save_success = data_store.save_users()
-            
-            if not save_success:
-                return jsonify({'error': 'Failed to update password in B2'}), 500
-            
-            logger.info(f"✓ Password updated for user: {target_email}")
-            
-            return jsonify({
-                'success': True,
-                'message': 'Password updated successfully'
+                'token': access_token,
+                'user': {
+                    'id': user['id'],
+                    'email': user['email'],
+                    'name': user['name'],
+                    'role': user['role']
+                }
             }), 200
         
+        return jsonify({'error': 'Invalid credentials'}), 401
+        
     except Exception as e:
-        logger.error(f"Error updating Karanja password: {e}")
+        logger.error(f"Login error: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/auth/me', methods=['GET'])
+@jwt_required()
+def get_current_user():
+    """Get current authenticated user"""
+    try:
+        current_user_id = get_jwt_identity()
+        data_store.load_all_data()
+        user = next((u for u in data_store.users if str(u['id']) == current_user_id), None)
+        
+        if user:
+            return jsonify({
+                'id': user['id'],
+                'email': user['email'],
+                'name': user['name'],
+                'role': user['role']
+            }), 200
+        
+        return jsonify({'error': 'User not found'}), 404
+        
+    except Exception as e:
+        logger.error(f"Error getting current user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    """Logout user - client should discard token"""
+    return jsonify({'success': True, 'message': 'Logged out successfully'}), 200
+
 # ==================== BACKBLAZE B2 UPLOAD ROUTE ====================
+
 @app.route('/api/b2/upload', methods=['POST'])
 @jwt_required()
 def upload_to_b2():
-    """Upload image to Backblaze B2 Private Bucket"""
+    """Upload image to Backblaze B2 Private Bucket - JWT REQUIRED"""
     if not b2_client:
         return jsonify({'error': 'Backblaze B2 is not configured'}), 503
     
@@ -548,6 +721,7 @@ def upload_to_b2():
         return jsonify({'error': str(e)}), 500
 
 # ==================== BACKBLAZE B2 HELPER FUNCTIONS ====================
+
 def generate_signed_url(s3_key, expiration=604800):
     """Generate a pre-signed URL for private B2 bucket access"""
     if not b2_client or not s3_key:
@@ -584,11 +758,12 @@ def extract_s3_key_from_url(url):
         logger.error(f"Error extracting S3 key: {e}")
     return None
 
-# ==================== PRODUCT ROUTES ====================
+# ==================== PRODUCT ROUTES (JWT REQUIRED) ====================
+
 @app.route('/api/products', methods=['GET'])
 @jwt_required()
 def get_products():
-    """Get all products with fresh signed URLs"""
+    """Get all products with fresh signed URLs - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         products = data_store.products
@@ -610,38 +785,10 @@ def get_products():
         logger.error(f"Error getting products: {e}")
         return jsonify([]), 200
 
-@app.route('/api/public/products', methods=['GET'])
-def get_public_products():
-    """Public endpoint to get products - NO LOGIN REQUIRED"""
-    try:
-        data_store.load_all_data()
-        products = data_store.products
-        
-        products.sort(key=lambda x: x.get('dateAdded', ''), reverse=True)
-        
-        products_copy = []
-        for product in products:
-            product_copy = product.copy()
-            product_copy.pop('buyPrice', None)
-            product_copy.pop('createdBy', None)
-            
-            if product.get('s3_key'):
-                fresh_url = generate_signed_url(product['s3_key'], expiration=86400)
-                if fresh_url:
-                    product_copy['image'] = fresh_url
-            
-            products_copy.append(product_copy)
-        
-        return jsonify(products_copy), 200
-        
-    except Exception as e:
-        logger.error(f"Error getting public products: {e}")
-        return jsonify([]), 200
-
 @app.route('/api/products', methods=['POST'])
 @jwt_required()
 def create_product():
-    """Create new product"""
+    """Create new product - JWT REQUIRED"""
     try:
         name = request.form.get('name')
         price = request.form.get('price')
@@ -747,7 +894,7 @@ def create_product():
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
 @jwt_required()
 def update_product(product_id):
-    """Update existing product"""
+    """Update existing product - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         
@@ -834,7 +981,7 @@ def update_product(product_id):
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
 @jwt_required()
 def delete_product(product_id):
-    """Delete product"""
+    """Delete product - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         
@@ -873,9 +1020,10 @@ def delete_product(product_id):
         return jsonify({'error': str(e)}), 500
 
 # ==================== STATIC FILE SERVING ====================
+
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    """Serve static files"""
+    """Serve static files with caching"""
     try:
         response = make_response(send_from_directory('static', filename))
         response.headers['Cache-Control'] = 'public, max-age=86400'
@@ -886,7 +1034,7 @@ def serve_static(filename):
 
 @app.route('/static/uploads/<path:filename>')
 def serve_upload(filename):
-    """Serve uploaded files"""
+    """Serve uploaded files with caching"""
     try:
         response = make_response(send_from_directory('static/uploads', filename))
         response.headers['Cache-Control'] = 'public, max-age=86400'
@@ -895,76 +1043,12 @@ def serve_upload(filename):
         logger.error(f"Error serving upload {filename}: {e}")
         return jsonify({'error': 'Uploaded file not found'}), 404
 
-# ==================== AUTHENTICATION ROUTES ====================
-@app.route('/api/auth/login', methods=['POST'])
-def login():
-    """Authenticate user and return JWT token"""
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
-        
-        if not email or not password:
-            return jsonify({'error': 'Email and password required'}), 400
-        
-        data_store.load_all_data()
-        user = next((u for u in data_store.users if u['email'].lower() == email.lower()), None)
-        
-        if user and bcrypt.check_password_hash(user['password'], password):
-            access_token = create_access_token(
-                identity=str(user['id']),
-                additional_claims={
-                    'email': user['email'],
-                    'name': user['name'],
-                    'role': user['role']
-                }
-            )
-            
-            return jsonify({
-                'success': True,
-                'token': access_token,
-                'user': {
-                    'id': user['id'],
-                    'email': user['email'],
-                    'name': user['name'],
-                    'role': user['role']
-                }
-            }), 200
-        
-        return jsonify({'error': 'Invalid credentials'}), 401
-        
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        return jsonify({'error': str(e)}), 500
+# ==================== DASHBOARD STATS (JWT REQUIRED) ====================
 
-@app.route('/api/auth/me', methods=['GET'])
-@jwt_required()
-def get_current_user():
-    """Get current authenticated user"""
-    try:
-        current_user_id = get_jwt_identity()
-        data_store.load_all_data()
-        user = next((u for u in data_store.users if str(u['id']) == current_user_id), None)
-        
-        if user:
-            return jsonify({
-                'id': user['id'],
-                'email': user['email'],
-                'name': user['name'],
-                'role': user['role']
-            }), 200
-        
-        return jsonify({'error': 'User not found'}), 404
-        
-    except Exception as e:
-        logger.error(f"Error getting current user: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# ==================== DASHBOARD STATS ====================
 @app.route('/api/dashboard/stats', methods=['GET'])
 @jwt_required()
 def get_dashboard_stats():
-    """Get dashboard statistics"""
+    """Get dashboard statistics - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         products = data_store.products
@@ -1008,11 +1092,12 @@ def get_dashboard_stats():
             'storage_type': 'b2'
         }), 200
 
-# ==================== SALES ROUTES ====================
+# ==================== SALES ROUTES (JWT REQUIRED) ====================
+
 @app.route('/api/sales', methods=['POST'])
 @jwt_required()
 def create_sale():
-    """Record new sale"""
+    """Record new sale - JWT REQUIRED"""
     try:
         data = request.get_json()
         
@@ -1102,7 +1187,7 @@ def create_sale():
 @app.route('/api/sales', methods=['GET'])
 @jwt_required()
 def get_sales():
-    """Get all sales"""
+    """Get all sales - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         sales = data_store.sales
@@ -1112,11 +1197,12 @@ def get_sales():
         logger.error(f"Error getting sales: {e}")
         return jsonify([]), 200
 
-# ==================== NOTIFICATION ROUTES ====================
+# ==================== NOTIFICATION ROUTES (JWT REQUIRED) ====================
+
 @app.route('/api/notifications', methods=['GET'])
 @jwt_required()
 def get_notifications():
-    """Get all notifications"""
+    """Get all notifications - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         notifications = data_store.notifications[:50]
@@ -1128,7 +1214,7 @@ def get_notifications():
 @app.route('/api/notifications/count', methods=['GET'])
 @jwt_required()
 def get_unread_notification_count():
-    """Get unread notification count"""
+    """Get unread notification count - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         unread_count = len([n for n in data_store.notifications if not n.get('read', False)])
@@ -1140,7 +1226,7 @@ def get_unread_notification_count():
 @app.route('/api/notifications/<int:notification_id>/read', methods=['PUT'])
 @jwt_required()
 def mark_notification_read(notification_id):
-    """Mark notification as read"""
+    """Mark notification as read - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         
@@ -1163,11 +1249,12 @@ def mark_notification_read(notification_id):
         logger.error(f"Error marking notification read: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== B2 INFO ROUTES ====================
+# ==================== B2 INFO ROUTES (JWT REQUIRED) ====================
+
 @app.route('/api/b2/info', methods=['GET'])
 @jwt_required()
 def get_b2_info():
-    """Get Backblaze B2 bucket information"""
+    """Get Backblaze B2 bucket information - JWT REQUIRED"""
     try:
         return jsonify({
             'bucketId': B2_CONFIG['BUCKET_ID'],
@@ -1186,9 +1273,11 @@ def get_b2_info():
         return jsonify({'error': str(e)}), 500
 
 # ==================== HEALTH CHECK ====================
+
 @app.route('/api/health', methods=['GET'])
+@jwt_required()
 def health_check():
-    """Health check endpoint"""
+    """Health check endpoint - JWT REQUIRED"""
     try:
         data_store.load_all_data()
         
@@ -1207,7 +1296,8 @@ def health_check():
     except Exception as e:
         return jsonify({'status': 'degraded', 'error': str(e)}), 200
 
-# ==================== STATIC PAGE ROUTES - FIXED FOR REFRESH LOOP ====================
+# ==================== STATIC PAGE ROUTES ====================
+
 @app.route('/')
 def index():
     """Serve index.html with proper caching headers to prevent refresh loop"""
@@ -1230,7 +1320,8 @@ def index():
         logger.error(f"Error serving index: {e}")
         return jsonify({'error': 'Could not load index.html'}), 500
 
-# ==================== CATCH-ALL ROUTE - FIXED FOR REFRESH LOOP ====================
+# ==================== CATCH-ALL ROUTE ====================
+
 @app.route('/<path:path>')
 def catch_all(path):
     """Serve index.html for all non-API routes with proper headers"""
@@ -1243,7 +1334,6 @@ def catch_all(path):
         if os.path.exists('index.html'):
             response = make_response(send_file('index.html'))
             response.headers['Cache-Control'] = 'public, max-age=3600'
-            response.headers['X-Content-Type-Options'] = 'nosniff'
             return response
     except Exception as e:
         logger.error(f"Error serving index for path {path}: {e}")
@@ -1251,6 +1341,7 @@ def catch_all(path):
     return jsonify({'error': 'Page not found'}), 404
 
 # ==================== ERROR HANDLERS ====================
+
 @app.errorhandler(404)
 def not_found(e):
     if request.path.startswith('/api/'):
@@ -1266,6 +1357,10 @@ def not_found(e):
         pass
     return jsonify({'error': 'Page not found'}), 404
 
+@app.errorhandler(401)
+def unauthorized(e):
+    return jsonify({'error': 'Authentication required', 'authenticated': False}), 401
+
 @app.errorhandler(500)
 def internal_server_error(e):
     logger.error(f"Internal server error: {e}")
@@ -1278,6 +1373,7 @@ def request_entity_too_large(e):
     return jsonify({'error': 'File too large. Maximum size is 20MB'}), 413
 
 # ==================== INITIALIZE SAMPLE DATA ====================
+
 def init_sample_data():
     """Initialize sample data if no products exist"""
     try:
@@ -1312,6 +1408,7 @@ def init_sample_data():
 init_sample_data()
 
 # ==================== RUN APPLICATION ====================
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     
@@ -1323,8 +1420,16 @@ if __name__ == '__main__':
     logger.info(f"  Products: {len(data_store.products)}")
     logger.info(f"  Sales: {len(data_store.sales)}")
     logger.info(f"  Images: {len(data_store.b2_images)}")
+    logger.info(f"  Users: {len(data_store.users)}")
     logger.info("=" * 70)
     logger.info("✓ CROSS-DEVICE SYNC ENABLED - Data is the same on phone, tablet, and PC")
     logger.info("=" * 70)
+    logger.info("✓ PUBLIC ENDPOINTS AVAILABLE:")
+    logger.info("  - GET  /api/public/products")
+    logger.info("  - GET  /api/public/health")
+    logger.info("  - GET  /api/public/b2/info")
+    logger.info("  - POST /api/auth/login")
+    logger.info("  - POST /api/auth/update-karanja-password")
+    logger.info("=" * 70)
     
-    app.run(host='0.0.0.0', port=port, debug=False)  # Set debug=False for production
+    app.run(host='0.0.0.0', port=port, debug=False)
