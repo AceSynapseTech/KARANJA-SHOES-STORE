@@ -167,101 +167,13 @@
             margin-right: 5px;
         }
 
-        /* ==================== PASSWORD CHANGE MODAL ==================== */
-        .password-change-modal {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: var(--card-bg);
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            z-index: 4000;
-            width: 90%;
-            max-width: 500px;
-            display: none;
-            border: 2px solid var(--accent);
-        }
-
-        .password-change-modal.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .password-change-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .password-change-header h3 {
-            color: var(--primary);
-            margin: 0;
-        }
-
-        .password-change-header button {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: var(--gray);
-        }
-
-        .password-form-group {
-            margin-bottom: 20px;
-        }
-
-        .password-form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--dark);
-            font-weight: 600;
-        }
-
-        .password-form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            font-size: 1rem;
-            background: var(--card-bg);
-            color: var(--text-color);
-        }
-
-        .password-form-group small {
-            display: block;
-            margin-top: 5px;
-            color: var(--gray);
-            font-size: 0.8rem;
-        }
-
-        .password-change-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border-color);
-        }
-
-        /* ==================== MODAL OVERLAY ==================== */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 3500;
-            display: none;
-        }
-
-        .modal-overlay.active {
-            display: block;
+        /* ==================== PASSWORD CHANGE MODAL - HIDDEN ==================== */
+        .password-change-modal,
+        .modal-overlay,
+        #forgotPasswordLink,
+        #changePasswordInDashboard,
+        #settingsChangePassword {
+            display: none !important;
         }
 
         /* ==================== FAST UPLOAD INDICATOR ==================== */
@@ -1968,9 +1880,12 @@
             
             <div class="login-info">
                 <i class="fas fa-info-circle"></i> 
-                <strong>KARANJASHOESSTORE@GMAIL.COM</strong><br>
-                <span style="display: block; margin-top: 5px;">Default password: <strong>0726539216</strong></span>
-                <span style="display: block; margin-top: 5px;">Click "Forgot Password?" to change your password</span>
+                <strong>CONSTANT LOGIN CREDENTIALS (NEVER CHANGE)</strong><br>
+                <span style="display: block; margin-top: 5px;">Email: <strong>KARANJASHOESTORE@GMAIL.COM</strong></span>
+                <span style="display: block; margin-top: 5px;">Password: <strong>0726539216</strong></span>
+                <span style="display: block; margin-top: 10px; color: var(--warning);">
+                    <i class="fas fa-lock"></i> Password cannot be changed - it's permanent
+                </span>
             </div>
             
             <div class="login-error" id="loginError">
@@ -1986,7 +1901,7 @@
             <form id="loginForm" class="login-form" onsubmit="handleLogin(event)">
                 <div class="form-group">
                     <label for="loginEmail">Email Address</label>
-                    <input type="email" id="loginEmail" class="form-control" placeholder="Enter your email" value="KARANJASHOESSTORE@GMAIL.COM" required>
+                    <input type="email" id="loginEmail" class="form-control" placeholder="Enter your email" value="KARANJASHOESTORE@GMAIL.COM" required>
                 </div>
                 
                 <div class="form-group">
@@ -1999,9 +1914,7 @@
                         <input type="checkbox" id="rememberMe" checked>
                         <label for="rememberMe" style="display: inline; margin-left: 5px; font-size: 0.9rem;">Remember me</label>
                     </div>
-                    <a href="#" id="forgotPasswordLink" style="color: var(--accent); text-decoration: none; font-size: 0.9rem;">
-                        <i class="fas fa-key"></i> Forgot Password?
-                    </a>
+                    <!-- Forgot password link removed - password is permanent -->
                 </div>
                 
                 <button type="submit" class="btn" id="loginBtn" style="width: 100%;">
@@ -2011,54 +1924,12 @@
             </form>
             
             <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: var(--gray);">
-                <i class="fas fa-cloud"></i> Backblaze B2 Storage • Data synced across all devices
+                <i class="fas fa-cloud"></i> Backblaze B2 Storage • Data synced across all devices<br>
+                <span style="color: var(--success); margin-top: 5px; display: block;">
+                    <i class="fas fa-check-circle"></i> Permanent login credentials - never forget your password!
+                </span>
             </div>
         </div>
-    </div>
-
-    <!-- ==================== PASSWORD CHANGE MODAL ==================== -->
-    <div class="modal-overlay" id="passwordOverlay"></div>
-    
-    <div class="password-change-modal" id="passwordChangeModal">
-        <div class="password-change-header">
-            <h3><i class="fas fa-key" style="color: var(--accent);"></i> Change Password</h3>
-            <button id="closePasswordModal">&times;</button>
-        </div>
-        
-        <div class="success-animation" id="passwordSuccess" style="display: none;">
-            <i class="fas fa-check-circle"></i>
-            <h3>Password Changed!</h3>
-            <p>Your password has been updated successfully</p>
-            <p style="font-size: 0.9rem; margin-top: 10px;">Please login with your new password</p>
-        </div>
-        
-        <form id="passwordChangeForm">
-            <div class="password-form-group">
-                <label for="currentPassword">Current Password</label>
-                <input type="password" id="currentPassword" class="form-control" placeholder="Enter current password" required>
-                <small>Default password: 0726539216</small>
-            </div>
-            
-            <div class="password-form-group">
-                <label for="newPassword">New Password</label>
-                <input type="password" id="newPassword" class="form-control" placeholder="Enter new password" required minlength="6">
-                <small>Must be at least 6 characters long</small>
-            </div>
-            
-            <div class="password-form-group">
-                <label for="confirmPassword">Confirm New Password</label>
-                <input type="password" id="confirmPassword" class="form-control" placeholder="Confirm new password" required minlength="6">
-            </div>
-            
-            <div class="password-change-footer">
-                <button type="button" class="btn btn-danger" id="cancelPasswordChange">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-save"></i> Update Password
-                </button>
-            </div>
-        </form>
     </div>
 
     <!-- ==================== MAIN DASHBOARD ==================== -->
@@ -2073,13 +1944,13 @@
             </div>
             
             <div class="admin-info">
-                <img src="https://ui-avatars.com/api/?name=Admin+Karanja&background=ff5722&color=fff&size=128" alt="Admin">
-                <h4 id="adminName">Loading...</h4>
+                <img src="https://ui-avatars.com/api/?name=Karanja+Store&background=ff5722&color=fff&size=128" alt="Admin">
+                <h4 id="adminName">Karanja Shoe Store</h4>
                 <p>Store Manager</p>
                 <div class="b2-badge" id="b2Status">
                     <i class="fas fa-cloud"></i> Backblaze B2 Connected
                 </div>
-                <p style="font-size: 0.7rem; margin-top: 5px;" id="userEmail"></p>
+                <p style="font-size: 0.7rem; margin-top: 5px;" id="userEmail">KARANJASHOESTORE@GMAIL.COM</p>
                 <p style="font-size: 0.7rem; margin-top: 2px;" id="bucketInfo"></p>
             </div>
             
@@ -2127,10 +1998,7 @@
                     <i class="fas fa-sign-out-alt"></i>
                     <span>Logout</span>
                 </a>
-                <a href="#" class="nav-item" id="changePasswordInDashboard" style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 10px;">
-                    <i class="fas fa-key"></i>
-                    <span>Change Password</span>
-                </a>
+                <!-- Password change link removed - password is permanent -->
             </div>
         </div>
 
@@ -2734,19 +2602,14 @@
                 <div class="products-section">
                     <div class="section-header">
                         <h2>Account Settings</h2>
-                        <div>
-                            <button class="btn btn-warning" id="settingsChangePassword">
-                                <i class="fas fa-key"></i>
-                                Change Password
-                            </button>
-                        </div>
+                        <!-- Password change button removed -->
                     </div>
                     
                     <div class="finance-card">
                         <h3>Profile Information</h3>
                         <div class="form-group">
                             <label>Email Address</label>
-                            <input type="email" id="profileEmail" class="form-control" readonly value="KARANJASHOESSTORE@GMAIL.COM">
+                            <input type="email" id="profileEmail" class="form-control" readonly value="KARANJASHOESTORE@GMAIL.COM">
                         </div>
                         <div class="form-group">
                             <label>Account Type</label>
@@ -2759,6 +2622,10 @@
                         <div class="form-group">
                             <label>Cross-Device Sync</label>
                             <input type="text" class="form-control" readonly value="Enabled - Data shared across all devices">
+                        </div>
+                        <div class="form-group">
+                            <label>Login Status</label>
+                            <input type="text" class="form-control" readonly value="✅ Permanent credentials - password never expires">
                         </div>
                     </div>
                     
@@ -3038,16 +2905,13 @@
 
     <script>
         // ==================== GLOBAL CONFIGURATION ====================
-        const API_BASE_URL = ''; // Empty for relative paths
-        const ADMIN_EMAIL = 'KARANJASHOESSTORE@GMAIL.COM';
-        const DEFAULT_PASSWORD = '0726539216';
-        const SECRET_KEY = 'karanja-update-2026';
+        const CONSTANT_EMAIL = 'KARANJASHOESTORE@GMAIL.COM';
+        const CONSTANT_PASSWORD = '0726539216';
 
         // ==================== API SERVICE ====================
         class ApiService {
             constructor() {
                 this.token = localStorage.getItem('karanjaToken');
-                this.refreshToken = localStorage.getItem('karanjaRefreshToken');
             }
 
             setToken(token) {
@@ -3082,9 +2946,7 @@
 
             async request(endpoint, options = {}) {
                 try {
-                    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
-                    
-                    const response = await fetch(url, options);
+                    const response = await fetch(endpoint, options);
                     
                     if (response.status === 401) {
                         // Token expired - redirect to login
@@ -3137,11 +2999,9 @@
 
             async uploadFormData(endpoint, formData, includeAuth = true) {
                 try {
-                    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
-                    
                     const headers = this.getFormDataHeaders(includeAuth);
                     
-                    const response = await fetch(url, {
+                    const response = await fetch(endpoint, {
                         method: 'POST',
                         headers: headers,
                         body: formData
@@ -3168,21 +3028,6 @@
             // ========== AUTH ENDPOINTS ==========
             async login(email, password) {
                 return this.post('/api/auth/login', { email, password }, false);
-            }
-
-            async updateKaranjaPassword(newPassword, confirmPassword) {
-                return this.post('/api/auth/update-karanja-password', {
-                    newPassword,
-                    confirmPassword,
-                    secretKey: SECRET_KEY
-                }, false);
-            }
-
-            async changePassword(currentPassword, newPassword) {
-                return this.post('/api/auth/change-password', {
-                    currentPassword,
-                    newPassword
-                }, true);
             }
 
             async getCurrentUser() {
@@ -3394,18 +3239,32 @@
                     loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
                 }
                 
-                const api = new ApiService();
-                const result = await api.login(email, password);
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
                 
-                console.log('Login response:', result);
+                console.log('Login response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Login failed');
+                }
+                
+                const result = await response.json();
+                console.log('Login response data:', result);
                 
                 if (result.success && result.token) {
-                    api.setToken(result.token);
+                    localStorage.setItem('karanjaToken', result.token);
                     
                     if (rememberMe) {
                         localStorage.setItem('karanjaRememberMe', 'true');
                     }
                     
+                    // Show success animation
                     const loginSuccess = document.getElementById('loginSuccess');
                     if (loginSuccess) {
                         loginSuccess.style.display = 'block';
@@ -3415,6 +3274,7 @@
                     const loginForm = document.getElementById('loginForm');
                     if (loginForm) loginForm.style.display = 'none';
                     
+                    // Reload to show dashboard
                     setTimeout(() => {
                         window.location.reload();
                     }, 1500);
@@ -3424,9 +3284,9 @@
             } catch (error) {
                 console.error('Login error:', error);
                 if (loginError) {
-                    loginError.textContent = error.message || 'Invalid credentials';
+                    loginError.textContent = `Invalid credentials. Please use: ${CONSTANT_EMAIL} / ${CONSTANT_PASSWORD}`;
                     loginError.classList.add('active');
-                    setTimeout(() => loginError.classList.remove('active'), 3000);
+                    setTimeout(() => loginError.classList.remove('active'), 5000);
                 }
                 
                 if (loginBtn) {
@@ -3514,144 +3374,6 @@
             }
 
             setupEventListeners() {
-                // ========== FORGOT PASSWORD LINK ==========
-                document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    
-                    const overlay = document.getElementById('passwordOverlay');
-                    const modal = document.getElementById('passwordChangeModal');
-                    
-                    if (overlay) overlay.classList.add('active');
-                    if (modal) modal.classList.add('active');
-                    
-                    const currentPassword = document.getElementById('currentPassword');
-                    if (currentPassword) currentPassword.value = DEFAULT_PASSWORD;
-                });
-
-                // ========== CLOSE PASSWORD MODAL ==========
-                const closePasswordModal = () => {
-                    const overlay = document.getElementById('passwordOverlay');
-                    const modal = document.getElementById('passwordChangeModal');
-                    const form = document.getElementById('passwordChangeForm');
-                    const success = document.getElementById('passwordSuccess');
-                    
-                    if (overlay) overlay.classList.remove('active');
-                    if (modal) modal.classList.remove('active');
-                    if (form) form.style.display = 'block';
-                    if (success) success.style.display = 'none';
-                    if (form) form.reset();
-                };
-
-                document.getElementById('closePasswordModal')?.addEventListener('click', closePasswordModal);
-                document.getElementById('cancelPasswordChange')?.addEventListener('click', closePasswordModal);
-                document.getElementById('passwordOverlay')?.addEventListener('click', closePasswordModal);
-
-                // ========== PASSWORD CHANGE FORM ==========
-                document.getElementById('passwordChangeForm')?.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    
-                    const currentPassword = document.getElementById('currentPassword')?.value;
-                    const newPassword = document.getElementById('newPassword')?.value;
-                    const confirmPassword = document.getElementById('confirmPassword')?.value;
-                    
-                    if (!currentPassword || !newPassword || !confirmPassword) {
-                        UIUtils.showToast('Please fill all fields', 'error');
-                        return;
-                    }
-                    
-                    if (newPassword !== confirmPassword) {
-                        UIUtils.showToast('New passwords do not match', 'error');
-                        return;
-                    }
-                    
-                    if (newPassword.length < 6) {
-                        UIUtils.showToast('Password must be at least 6 characters', 'error');
-                        return;
-                    }
-                    
-                    const submitBtn = e.target.querySelector('button[type="submit"]');
-                    if (submitBtn) {
-                        submitBtn.disabled = true;
-                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
-                    }
-                    
-                    try {
-                        let result;
-                        const email = document.getElementById('loginEmail')?.value;
-                        
-                        if (email && email.toUpperCase() === ADMIN_EMAIL) {
-                            result = await this.api.updateKaranjaPassword(newPassword, confirmPassword);
-                        } else {
-                            result = await this.api.changePassword(currentPassword, newPassword);
-                        }
-                        
-                        if (result.success) {
-                            const form = document.getElementById('passwordChangeForm');
-                            const success = document.getElementById('passwordSuccess');
-                            
-                            if (form) form.style.display = 'none';
-                            if (success) {
-                                success.style.display = 'block';
-                                success.classList.add('active');
-                            }
-                            
-                            UIUtils.showToast(result.message || 'Password updated successfully!', 'success');
-                            
-                            setTimeout(() => {
-                                closePasswordModal();
-                            }, 2000);
-                        } else {
-                            throw new Error(result.error || 'Failed to update password');
-                        }
-                    } catch (error) {
-                        UIUtils.showToast(error.message || 'Failed to update password', 'error');
-                    } finally {
-                        if (submitBtn) {
-                            submitBtn.disabled = false;
-                            submitBtn.innerHTML = '<i class="fas fa-save"></i> Update Password';
-                        }
-                    }
-                });
-
-                // ========== CHANGE PASSWORD FROM DASHBOARD ==========
-                document.getElementById('changePasswordInDashboard')?.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    
-                    const overlay = document.getElementById('passwordOverlay');
-                    const modal = document.getElementById('passwordChangeModal');
-                    
-                    if (overlay) overlay.classList.add('active');
-                    if (modal) modal.classList.add('active');
-                    
-                    const form = document.getElementById('passwordChangeForm');
-                    const success = document.getElementById('passwordSuccess');
-                    
-                    if (form) {
-                        form.style.display = 'block';
-                        form.reset();
-                    }
-                    if (success) success.style.display = 'none';
-                });
-
-                document.getElementById('settingsChangePassword')?.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    
-                    const overlay = document.getElementById('passwordOverlay');
-                    const modal = document.getElementById('passwordChangeModal');
-                    
-                    if (overlay) overlay.classList.add('active');
-                    if (modal) modal.classList.add('active');
-                    
-                    const form = document.getElementById('passwordChangeForm');
-                    const success = document.getElementById('passwordSuccess');
-                    
-                    if (form) {
-                        form.style.display = 'block';
-                        form.reset();
-                    }
-                    if (success) success.style.display = 'none';
-                });
-
                 // ========== LOGOUT ==========
                 document.getElementById('logoutBtn')?.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -3733,7 +3455,6 @@
                 });
 
                 document.getElementById('markAllRead')?.addEventListener('click', async () => {
-                    // In a real app, you'd mark all as read via API
                     UIUtils.showToast('All notifications marked as read', 'success');
                 });
 
@@ -3989,12 +3710,10 @@
                 });
 
                 document.getElementById('downloadStatement')?.addEventListener('click', () => {
-                    // In a real app, you'd generate a statement
                     UIUtils.showToast('Download feature coming soon', 'info');
                 });
 
                 document.getElementById('printStatement')?.addEventListener('click', () => {
-                    // In a real app, you'd print a statement
                     UIUtils.showToast('Print feature coming soon', 'info');
                 });
 
@@ -4012,13 +3731,18 @@
                     // Load user info
                     if (this.user) {
                         const adminNameEl = document.getElementById('adminName');
-                        if (adminNameEl) adminNameEl.textContent = this.user.name || 'Admin';
+                        if (adminNameEl) adminNameEl.textContent = this.user.name || 'Karanja Shoe Store';
                         
                         const userEmailEl = document.getElementById('userEmail');
-                        if (userEmailEl) userEmailEl.textContent = this.user.email || '';
+                        if (userEmailEl) userEmailEl.textContent = this.user.email || CONSTANT_EMAIL;
                         
                         const profileEmail = document.getElementById('profileEmail');
-                        if (profileEmail) profileEmail.value = this.user.email || ADMIN_EMAIL;
+                        if (profileEmail) profileEmail.value = this.user.email || CONSTANT_EMAIL;
+                    } else {
+                        // Fallback to constant values
+                        document.getElementById('adminName').textContent = 'Karanja Shoe Store';
+                        document.getElementById('userEmail').textContent = CONSTANT_EMAIL;
+                        document.getElementById('profileEmail').value = CONSTANT_EMAIL;
                     }
                     
                     // Load B2 info
@@ -4698,7 +4422,6 @@
             }
 
             async checkStockAlerts() {
-                // In a real app, you'd check for stock alerts from the backend
                 this.updateNotificationBadge();
                 await this.loadNotifications();
             }
@@ -5673,4 +5396,4 @@
         window.app = app; // Make app globally accessible for inline onclick handlers
     </script>
 </body>
-                </html>
+</html>
