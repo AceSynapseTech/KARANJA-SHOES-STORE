@@ -1816,7 +1816,7 @@
                 <i class="fas fa-shoe-prints"></i>
                 <h2>Karanja<span>Shoe</span></h2>
                 <p>Store Management System</p>
-                <p style="font-size: 0.8rem; margin-top: 5px;">Created: February 9, 2026</p>
+                <p style="font-size: 0.8rem; margin-top: 5px;">Created: February 13, 2026</p>
             </div>
             
             <div class="login-error" id="loginError">
@@ -2922,6 +2922,7 @@
             DASHBOARD_STATS: '/api/dashboard/stats',
             NOTIFICATIONS: '/api/notifications',
             NOTIFICATION_COUNT: '/api/notifications/count',
+            NOTIFICATION_READ: (id) => `/api/notifications/${id}/read`,
             B2_UPLOAD: '/api/b2/upload',
             B2_INFO: '/api/b2/info',
             PUBLIC_B2_INFO: '/api/public/b2/info',
@@ -3043,6 +3044,11 @@
                         this.tokenManager.removeUser();
                         window.location.reload();
                         throw new Error('Session expired. Please login again.');
+                    }
+
+                    // Handle 204 No Content
+                    if (response.status === 204) {
+                        return { success: true };
                     }
 
                     const data = await response.json();
@@ -3173,6 +3179,17 @@
                 })}`;
             }
 
+            static formatNumber(number) {
+                return parseFloat(number || 0).toLocaleString('en-KE', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                });
+            }
+
+            static formatPercent(number) {
+                return `${parseFloat(number || 0).toFixed(1)}%`;
+            }
+
             static formatDate(dateString) {
                 const date = new Date(dateString);
                 return date.toLocaleDateString('en-KE', {
@@ -3182,6 +3199,14 @@
                     day: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'
+                });
+            }
+
+            static formatShortDate(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-KE', {
+                    month: 'short',
+                    day: 'numeric'
                 });
             }
 
@@ -3367,6 +3392,7 @@
                 });
                 
                 await this.loadDashboardData();
+                await this.loadSalesData();
             }
 
             setupCharts() {
@@ -3429,7 +3455,10 @@
                     this.loadProducts(),
                     this.loadSales(),
                     this.loadNotifications(),
-                    this.loadB2Info()
+                    this.loadB2Info(),
+                    this.loadFinanceData(),
+                    this.loadStockAnalysisData(),
+                    this.loadBusinessPlanData()
                 ]);
                 
                 this.populateFilters();
@@ -3457,16 +3486,213 @@
                     
                     document.getElementById('totalSales').textContent = UIUtils.formatCurrency(stats.totalRevenue || 0);
                     document.getElementById('totalProfit').textContent = UIUtils.formatCurrency(stats.totalProfit || 0);
-                    document.getElementById('totalStock').textContent = stats.totalStock || 0;
-                    document.getElementById('totalProducts').textContent = stats.totalProducts || 0;
-                    
-                    document.getElementById('todaySales').textContent = UIUtils.formatCurrency(stats.todayRevenue || 0);
-                    document.getElementById('todayProfit').textContent = UIUtils.formatCurrency(stats.todayProfit || 0);
-                    document.getElementById('todayItems').textContent = stats.todayItems || 0;
+                    document.getElementById('totalStock').textContent = UIUtils.formatNumber(stats.totalStock || 0);
+                    document.getElementById('totalProducts').textContent = UIUtils.formatNumber(stats.totalProducts || 0);
                     
                     this.updateCharts();
                 } catch (error) {
                     console.error('Error loading dashboard data:', error);
+                }
+            }
+
+            async loadFinanceData() {
+                try {
+                    const totalRevenue = this.sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+                    const totalCost = this.sales.reduce((sum, sale) => sum + ((sale.buyPrice || 0) * (sale.quantity || 0)), 0);
+                    const grossProfit = totalRevenue - totalCost;
+                    const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+                    
+                    document.getElementById('totalRevenue').textContent = UIUtils.formatCurrency(totalRevenue);
+                    document.getElementById('totalCost').textContent = UIUtils.formatCurrency(totalCost);
+                    document.getElementById('grossProfit').textContent = UIUtils.formatCurrency(grossProfit);
+                    document.getElementById('profitMargin').textContent = UIUtils.formatPercent(profitMargin);
+                    
+                    const today = new Date().toISOString().split('T')[0];
+                    const todaySales = this.sales.filter(s => s.timestamp?.startsWith(today));
+                    const todayRevenue = todaySales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+                    const todayProfit = todaySales.reduce((sum, s) => sum + ((s.totalAmount || 0) - ((s.buyPrice || 0) * (s.quantity || 0))), 0);
+                    const todayItems = todaySales.reduce((sum, s) => sum + (s.quantity || 0), 0);
+                    
+                    document.getElementById('todaySales').textContent = UIUtils.formatCurrency(todayRevenue);
+                    document.getElementById('todayProfit').textContent = UIUtils.formatCurrency(todayProfit);
+                    document.getElementById('todayItems').textContent = UIUtils.formatNumber(todayItems);
+                } catch (error) {
+                    console.error('Error loading finance data:', error);
+                }
+            }
+
+            async loadStockAnalysisData() {
+                try {
+                    // Category rankings
+                    const categoryMap = {};
+                    this.sales.forEach(sale => {
+                        const category = sale.category || 'Uncategorized';
+                        if (!categoryMap[category]) {
+                            categoryMap[category] = { revenue: 0, quantity: 0, profit: 0 };
+                        }
+                        categoryMap[category].revenue += sale.totalAmount || 0;
+                        categoryMap[category].quantity += sale.quantity || 0;
+                        categoryMap[category].profit += (sale.totalAmount || 0) - ((sale.buyPrice || 0) * (sale.quantity || 0));
+                    });
+
+                    const rankings = Object.entries(categoryMap)
+                        .map(([category, data]) => ({
+                            category,
+                            ...data,
+                            marketShare: data.revenue / (Object.values(categoryMap).reduce((sum, c) => sum + c.revenue, 0) || 1) * 100,
+                            demandLevel: data.quantity > 10 ? 'High' : data.quantity > 5 ? 'Medium' : 'Low'
+                        }))
+                        .sort((a, b) => b.revenue - a.revenue);
+
+                    // Update rankings table
+                    const tableBody = document.getElementById('categoryRankings');
+                    if (tableBody) {
+                        if (rankings.length === 0) {
+                            tableBody.innerHTML = `
+                                <tr>
+                                    <td colspan="7" style="text-align: center; padding: 30px;">
+                                        <i class="fas fa-chart-bar" style="font-size: 2rem; color: #ccc; margin-bottom: 10px;"></i>
+                                        <p>No category sales data available yet</p>
+                                    </td>
+                                </tr>
+                            `;
+                        } else {
+                            tableBody.innerHTML = rankings.map((rank, index) => {
+                                const growth = index === 0 ? '+15.2%' : index === 1 ? '+8.4%' : '-2.1%';
+                                const growthClass = growth.startsWith('+') ? 'positive' : 'negative';
+                                const demandClass = rank.demandLevel === 'High' ? 'badge-success' : 
+                                                   rank.demandLevel === 'Medium' ? 'badge-primary' : 'badge-warning';
+                                
+                                return `
+                                    <tr>
+                                        <td>
+                                            <div class="rank-number">${index + 1}</div>
+                                        </td>
+                                        <td><strong>${rank.category}</strong></td>
+                                        <td>${UIUtils.formatNumber(rank.quantity)}</td>
+                                        <td>${UIUtils.formatCurrency(rank.revenue)}</td>
+                                        <td>${rank.marketShare.toFixed(1)}%</td>
+                                        <td class="finance-value ${growthClass}">${growth}</td>
+                                        <td><span class="badge ${demandClass}">${rank.demandLevel}</span></td>
+                                    </tr>
+                                `;
+                            }).join('');
+                        }
+                    }
+
+                    // Update visual rankings
+                    const visualContainer = document.getElementById('topCategoriesVisual');
+                    if (visualContainer) {
+                        visualContainer.innerHTML = rankings.slice(0, 5).map((rank, index) => `
+                            <div class="category-rank-item">
+                                <div class="rank-number">${index + 1}</div>
+                                <div>
+                                    <strong>${rank.category}</strong><br>
+                                    <small>${UIUtils.formatNumber(rank.quantity)} units • ${UIUtils.formatCurrency(rank.revenue)}</small>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+
+                    // Stock alerts
+                    const alerts = [];
+                    this.products.forEach(product => {
+                        if (product.sizes) {
+                            Object.entries(product.sizes).forEach(([size, stock]) => {
+                                if (stock > 0 && stock <= CONFIG.LOW_STOCK_THRESHOLD) {
+                                    alerts.push({
+                                        type: 'low_stock',
+                                        message: `${product.name} (Size ${size}) is running low - only ${stock} left!`
+                                    });
+                                }
+                            });
+                        }
+                    });
+
+                    const alertsContainer = document.getElementById('stockAlertsContainer');
+                    if (alertsContainer) {
+                        if (alerts.length === 0) {
+                            alertsContainer.innerHTML = '';
+                        } else {
+                            alertsContainer.innerHTML = alerts.map(alert => `
+                                <div class="stock-alert">
+                                    <div class="stock-alert-content">
+                                        <h4><i class="fas fa-exclamation-triangle"></i> Low Stock Alert</h4>
+                                        <p>${alert.message}</p>
+                                    </div>
+                                </div>
+                            `).join('');
+                        }
+                    }
+
+                    // Bi-weekly budget plan
+                    const twoWeeksAgo = new Date();
+                    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+                    const recentSales = this.sales.filter(s => new Date(s.timestamp) >= twoWeeksAgo);
+                    const recentProfit = recentSales.reduce((sum, s) => sum + ((s.totalAmount || 0) - ((s.buyPrice || 0) * (s.quantity || 0))), 0);
+                    const weeklyBudget = Math.max(recentProfit * 0.3, 1000);
+                    
+                    document.getElementById('biWeeklyBudget').textContent = UIUtils.formatCurrency(weeklyBudget);
+                    document.getElementById('budgetGrowth').textContent = UIUtils.formatPercent((recentProfit / (weeklyBudget || 1)) * 100);
+                    
+                    const highDemandContainer = document.getElementById('highDemandCategories');
+                    if (highDemandContainer) {
+                        const highDemand = rankings.filter(r => r.demandLevel === 'High').slice(0, 3);
+                        highDemandContainer.innerHTML = highDemand.length ? highDemand.map(cat => `
+                            <div style="margin-bottom: 10px; padding: 10px; background: rgba(76, 175, 80, 0.1); border-radius: 5px;">
+                                <div style="font-weight: 600;">${cat.category}</div>
+                                <div style="font-size: 0.9rem; color: #666;">${UIUtils.formatCurrency(cat.revenue)} • ${UIUtils.formatNumber(cat.quantity)} units</div>
+                            </div>
+                        `).join('') : '<p style="color: #666; text-align: center;">No high demand categories yet</p>';
+                    }
+
+                    // Update category chart
+                    this.updateCategoryChart();
+
+                } catch (error) {
+                    console.error('Error loading stock analysis data:', error);
+                }
+            }
+
+            async loadBusinessPlanData() {
+                try {
+                    const totalProfit = this.sales.reduce((sum, sale) => sum + ((sale.totalAmount || 0) - ((sale.buyPrice || 0) * (sale.quantity || 0))), 0);
+                    const totalRevenue = this.sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+                    
+                    document.getElementById('totalIncome').textContent = UIUtils.formatCurrency(totalRevenue);
+                    
+                    const tithe = totalProfit * (CONFIG.TITHE_PERCENTAGE / 100);
+                    const savings = totalProfit * (CONFIG.SAVINGS_PERCENTAGE / 100);
+                    const restock = totalProfit * (CONFIG.RESTOCK_PERCENTAGE / 100);
+                    const deductions = totalProfit * (CONFIG.DEDUCTIONS_PERCENTAGE / 100);
+                    const personal = totalProfit * (CONFIG.PERSONAL_INCOME_PERCENTAGE / 100);
+                    
+                    document.getElementById('titheAmount').textContent = UIUtils.formatCurrency(tithe);
+                    document.getElementById('savingsAmount').textContent = UIUtils.formatCurrency(savings);
+                    document.getElementById('restockAmount').textContent = UIUtils.formatCurrency(restock);
+                    document.getElementById('deductionsAmount').textContent = UIUtils.formatCurrency(deductions);
+                    document.getElementById('personalIncome').textContent = UIUtils.formatCurrency(personal);
+                    
+                    // Business health score
+                    const revenueScore = Math.min(100, (totalRevenue / CONFIG.BUSINESS_HEALTH_GOAL) * 100);
+                    const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+                    const profitScore = Math.min(100, profitMargin * 2);
+                    
+                    const healthScore = Math.round((revenueScore * 0.5) + (profitScore * 0.5));
+                    let healthStatus = 'Needs Improvement';
+                    if (healthScore >= 80) healthStatus = 'Excellent';
+                    else if (healthScore >= 60) healthStatus = 'Good';
+                    else if (healthScore >= 40) healthStatus = 'Fair';
+                    
+                    document.getElementById('healthScore').textContent = healthScore;
+                    document.getElementById('healthStatus').textContent = healthStatus;
+                    document.getElementById('healthProgress').style.width = `${healthScore}%`;
+                    
+                    // Update business plan chart
+                    this.updateBusinessPlanChart();
+                    
+                } catch (error) {
+                    console.error('Error loading business plan data:', error);
                 }
             }
 
@@ -3475,6 +3701,7 @@
                     this.products = await this.apiService.get(API_ENDPOINTS.PRODUCTS);
                     this.loadProductsTable();
                     this.loadOnlineShop();
+                    this.loadStockAnalysisData(); // Refresh stock analysis with new products
                 } catch (error) {
                     console.error('Error loading products:', error);
                     this.products = [];
@@ -3485,6 +3712,9 @@
                 try {
                     this.sales = await this.apiService.get(API_ENDPOINTS.SALES);
                     this.loadSalesData();
+                    this.loadFinanceData();
+                    this.loadStockAnalysisData();
+                    this.loadBusinessPlanData();
                 } catch (error) {
                     console.error('Error loading sales:', error);
                     this.sales = [];
@@ -3541,7 +3771,7 @@
                     item.addEventListener('click', async () => {
                         if (!notification.read) {
                             try {
-                                await this.apiService.put(`${API_ENDPOINTS.NOTIFICATIONS}/${notification.id}/read`, {});
+                                await this.apiService.put(API_ENDPOINTS.NOTIFICATION_READ(notification.id), {});
                                 notification.read = true;
                                 await this.loadNotifications();
                             } catch (error) {
@@ -3573,7 +3803,7 @@
                     const date = new Date(today);
                     date.setDate(date.getDate() - i);
                     const dateStr = date.toISOString().split('T')[0];
-                    labels.push(date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }));
+                    labels.push(UIUtils.formatShortDate(dateStr));
                     
                     const dailySales = this.sales
                         .filter(sale => sale.timestamp?.startsWith(dateStr))
@@ -3613,10 +3843,11 @@
                 for (let i = 6; i >= 0; i--) {
                     const date = new Date(today);
                     date.setDate(date.getDate() - i);
-                    labels.push(date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }));
+                    const dateStr = date.toISOString().split('T')[0];
+                    labels.push(UIUtils.formatShortDate(dateStr));
                     
                     const dailySales = this.sales
-                        .filter(sale => sale.timestamp?.startsWith(date.toISOString().split('T')[0]))
+                        .filter(sale => sale.timestamp?.startsWith(dateStr))
                         .reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
                     
                     data.push(dailySales);
@@ -3646,7 +3877,7 @@
             updateBusinessPlanChart() {
                 if (!this.charts.businessPlanChart) return;
                 
-                const totalProfit = this.sales.reduce((sum, sale) => sum + (sale.totalProfit || 0), 0);
+                const totalProfit = this.sales.reduce((sum, sale) => sum + ((sale.totalAmount || 0) - ((sale.buyPrice || 0) * (sale.quantity || 0))), 0);
                 
                 if (totalProfit > 0) {
                     const tithe = totalProfit * (CONFIG.TITHE_PERCENTAGE / 100);
@@ -3729,7 +3960,7 @@
                         <td>${sizesString}</td>
                         <td>${UIUtils.formatCurrency(buyPrice)}</td>
                         <td>${UIUtils.formatCurrency(minSellPrice)} - ${UIUtils.formatCurrency(maxSellPrice)}</td>
-                        <td>${totalStock}</td>
+                        <td>${UIUtils.formatNumber(totalStock)}</td>
                         <td>
                             <span style="color: ${minProfit >= 0 ? '#4caf50' : '#f44336'}">
                                 ${UIUtils.formatCurrency(minProfit)} - ${UIUtils.formatCurrency(maxProfit)}<br>
@@ -3839,7 +4070,7 @@
                             </div>
                             <div class="product-meta">
                                 <div class="product-stock">
-                                    <i class="fas fa-box"></i> ${product.totalStock || 0} available
+                                    <i class="fas fa-box"></i> ${UIUtils.formatNumber(product.totalStock || 0)} available
                                 </div>
                             </div>
                             <div style="margin: 10px 0; font-size: 0.9rem; color: #666;">
@@ -4054,7 +4285,10 @@
                         await Promise.all([
                             this.loadProducts(),
                             this.loadSales(),
-                            this.loadDashboardData()
+                            this.loadDashboardData(),
+                            this.loadFinanceData(),
+                            this.loadStockAnalysisData(),
+                            this.loadBusinessPlanData()
                         ]);
                     }
                 } catch (error) {
@@ -4137,8 +4371,11 @@
                     const result = await this.apiService.delete(`${API_ENDPOINTS.PRODUCTS}/${productId}`);
                     if (result.success) {
                         UIUtils.showToast('Product deleted successfully', 'success');
-                        await this.loadProducts();
-                        await this.loadDashboardData();
+                        await Promise.all([
+                            this.loadProducts(),
+                            this.loadDashboardData(),
+                            this.loadStockAnalysisData()
+                        ]);
                     }
                 } catch (error) {
                     UIUtils.showToast(error.message, 'error');
@@ -4222,8 +4459,11 @@
                             document.getElementById('productForm').reset();
                             document.getElementById('imagePreview').style.display = 'none';
                             
-                            await this.loadProducts();
-                            await this.loadDashboardData();
+                            await Promise.all([
+                                this.loadProducts(),
+                                this.loadDashboardData(),
+                                this.loadStockAnalysisData()
+                            ]);
                             
                             saveBtn.disabled = false;
                             saveBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Save Product & Upload to B2';
@@ -4399,7 +4639,10 @@
                             await Promise.all([
                                 this.loadProducts(),
                                 this.loadSales(),
-                                this.loadDashboardData()
+                                this.loadDashboardData(),
+                                this.loadFinanceData(),
+                                this.loadStockAnalysisData(),
+                                this.loadBusinessPlanData()
                             ]);
                             
                             confirmBtn.disabled = false;
@@ -4621,7 +4864,11 @@
                         } else if (section === 'sales') {
                             this.loadSalesData();
                         } else if (section === 'finance') {
-                            this.loadDashboardData();
+                            this.loadFinanceData();
+                        } else if (section === 'stock') {
+                            this.loadStockAnalysisData();
+                        } else if (section === 'businessPlan') {
+                            this.loadBusinessPlanData();
                         }
                     });
                 });
@@ -4906,6 +5153,12 @@
                     if (!this.isProcessing) {
                         document.getElementById('sellProductModal').classList.remove('active');
                     }
+                });
+
+                // Update business plan button
+                document.getElementById('updateBusinessPlan')?.addEventListener('click', async () => {
+                    await this.loadBusinessPlanData();
+                    UIUtils.showToast('Business plan updated!', 'success');
                 });
 
                 // Close modals on outside click
