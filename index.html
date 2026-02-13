@@ -1983,7 +1983,7 @@
                 <p>Redirecting to dashboard...</p>
             </div>
             
-            <form id="loginForm" class="login-form" onsubmit="event.preventDefault(); return false;">
+            <form id="loginForm" class="login-form" onsubmit="handleLogin(event)">
                 <div class="form-group">
                     <label for="loginEmail">Email Address</label>
                     <input type="email" id="loginEmail" class="form-control" placeholder="Enter your email" value="KARANJASHOESSTORE@GMAIL.COM" required>
@@ -2004,7 +2004,7 @@
                     </a>
                 </div>
                 
-                <button type="button" class="btn" id="loginBtn" style="width: 100%;" onclick="handleLogin()">
+                <button type="submit" class="btn" id="loginBtn" style="width: 100%;">
                     <i class="fas fa-sign-in-alt"></i>
                     Access Dashboard
                 </button>
@@ -3368,12 +3368,16 @@
         }
 
         // ==================== GLOBAL LOGIN FUNCTION ====================
-        window.handleLogin = async function() {
+        window.handleLogin = async function(event) {
+            event.preventDefault();
+            
             const email = document.getElementById('loginEmail')?.value;
             const password = document.getElementById('loginPassword')?.value;
             const rememberMe = document.getElementById('rememberMe')?.checked || false;
             const loginError = document.getElementById('loginError');
             const loginBtn = document.getElementById('loginBtn');
+            
+            console.log('Login attempt with email:', email);
             
             if (!email || !password) {
                 if (loginError) {
@@ -3392,6 +3396,8 @@
                 
                 const api = new ApiService();
                 const result = await api.login(email, password);
+                
+                console.log('Login response:', result);
                 
                 if (result.success && result.token) {
                     api.setToken(result.token);
@@ -5667,4 +5673,4 @@
         window.app = app; // Make app globally accessible for inline onclick handlers
     </script>
 </body>
-    </html>
+                </html>
