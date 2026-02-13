@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, send_file, send_from_directory, make_response
 from flask_cors import CORS
-from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, verify_jwt_in_request
 from datetime import datetime, timedelta
 import json
@@ -25,7 +24,7 @@ app = Flask(__name__)
 # ==================== CONFIGURATION ====================
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'karanja-shoe-store-secret-key-2026')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'karanja-jwt-secret-key-2026')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)  # Extended token expiry
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20MB
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['STATIC_FOLDER'] = 'static'
@@ -33,6 +32,14 @@ app.config['STATIC_FOLDER'] = 'static'
 # Create static folders
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('static', exist_ok=True)
+
+# ==================== CONSTANT LOGIN CREDENTIALS ====================
+# THESE CREDENTIALS WILL NEVER CHANGE
+CONSTANT_EMAIL = "KARANJASHOESTORE@GMAIL.COM"
+CONSTANT_PASSWORD = "0726539216"
+CONSTANT_USER_ID = "1"
+CONSTANT_USER_NAME = "Karanja Shoe Store"
+CONSTANT_USER_ROLE = "admin"
 
 # ==================== BACKBLAZE B2 CONFIGURATION ====================
 B2_CONFIG = {
@@ -61,8 +68,7 @@ B2_CONFIG = {
         'DAILY_STATEMENTS': 'data/daily_statements.json',
         'BUDGET_PLANS': 'data/budget_plans.json',
         'SALE_STATEMENTS': 'data/sale_statements.json',
-        'B2_IMAGES': 'data/b2_images.json',
-        'USERS': 'data/users.json'
+        'B2_IMAGES': 'data/b2_images.json'
     }
 }
 
@@ -97,7 +103,6 @@ CORS(app, resources={
         "max_age": 3600
     }
 })
-bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
 # ==================== CUSTOM JSON ENCODER ====================
@@ -214,7 +219,6 @@ class B2DataStore:
         self.cache['budget_plans'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['BUDGET_PLANS'])
         self.cache['sale_statements'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['SALE_STATEMENTS'])
         self.cache['b2_images'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['B2_IMAGES'])
-        self.cache['users'] = self._read_json_from_b2(B2_CONFIG['DATA_PATHS']['USERS'])
         
         # Initialize defaults
         if not isinstance(self.cache.get('products'), list):
@@ -242,8 +246,6 @@ class B2DataStore:
             self.cache['sale_statements'] = []
         if not isinstance(self.cache.get('b2_images'), list):
             self.cache['b2_images'] = []
-        if not isinstance(self.cache.get('users'), list):
-            self.cache['users'] = []
         
         self.initialized = True
         logger.info("✓ All data loaded from Backblaze B2")
@@ -310,13 +312,6 @@ class B2DataStore:
     
     def save_b2_images(self):
         return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['B2_IMAGES'], self.b2_images)
-    
-    @property
-    def users(self):
-        return self.cache.get('users', [])
-    
-    def save_users(self):
-        return self._write_json_to_b2(B2_CONFIG['DATA_PATHS']['USERS'], self.users)
 
 # Initialize Data Store
 if not B2_AVAILABLE or not b2_client:
@@ -325,40 +320,6 @@ if not B2_AVAILABLE or not b2_client:
 
 data_store = B2DataStore(b2_client, B2_CONFIG['BUCKET_NAME'])
 logger.info("✓ Using Backblaze B2 for ALL data storage")
-
-# Initialize default admin if no users exist
-if not data_store.users:
-    admin_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
-    admin_user = {
-        'id': 1,
-        'email': 'admin@karanjashoes.com',
-        'password': admin_password,
-        'name': 'Admin Karanja',
-        'role': 'admin',
-        'created_at': datetime.now().isoformat()
-    }
-    data_store.cache['users'] = [admin_user]
-    data_store.save_users()
-    logger.info("✓ Created default admin user in B2")
-
-# Initialize KARANJASHOESTORE@GMAIL.COM user if not exists
-karanja_email = 'KARANJASHOESTORE@GMAIL.COM'
-karanja_user = next((u for u in data_store.users if u['email'].upper() == karanja_email), None)
-if not karanja_user:
-    karanja_password = bcrypt.generate_password_hash('0726539216').decode('utf-8')
-    karanja_user_data = {
-        'id': 2,
-        'email': karanja_email,
-        'password': karanja_password,
-        'name': 'Karanja Shoe Store',
-        'role': 'admin',
-        'created_at': datetime.now().isoformat()
-    }
-    data_store.users.append(karanja_user_data)
-    data_store.save_users()
-    logger.info(f"✓ Created user: {karanja_email} with default password")
-else:
-    logger.info(f"✓ User {karanja_email} already exists")
 
 # ==================== PUBLIC ENDPOINTS (NO JWT REQUIRED) ====================
 
@@ -427,193 +388,48 @@ def get_public_b2_info():
         logger.error(f"Error getting B2 info: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== PASSWORD MANAGEMENT ====================
-
-@app.route('/api/auth/update-karanja-password', methods=['POST'])
-def update_karanja_password():
-    """Special route to update KARANJASHOESTORE@GMAIL.COM password - NO JWT REQUIRED"""
-    try:
-        data = request.get_json()
-        new_password = data.get('newPassword')
-        confirm_password = data.get('confirmPassword')
-        secret_key = data.get('secretKey')
-        
-        # Simple security check
-        if secret_key != 'karanja-update-2026':
-            return jsonify({'error': 'Invalid secret key'}), 401
-        
-        if not new_password or not confirm_password:
-            return jsonify({'error': 'New password and confirmation are required'}), 400
-        
-        if new_password != confirm_password:
-            return jsonify({'error': 'Passwords do not match'}), 400
-        
-        if len(new_password) < 6:
-            return jsonify({'error': 'Password must be at least 6 characters long'}), 400
-        
-        data_store.load_all_data()
-        
-        # Find the specific user
-        target_email = 'KARANJASHOESTORE@GMAIL.COM'
-        user_index = -1
-        user = None
-        
-        for i, u in enumerate(data_store.users):
-            if u['email'].upper() == target_email:
-                user_index = i
-                user = u
-                break
-        
-        if not user:
-            # Create user if doesn't exist
-            new_user = {
-                'id': int(datetime.now().timestamp() * 1000),
-                'email': target_email,
-                'password': bcrypt.generate_password_hash(new_password).decode('utf-8'),
-                'name': 'Karanja Shoe Store',
-                'role': 'admin',
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
-            }
-            data_store.users.append(new_user)
-            save_success = data_store.save_users()
-            
-            if not save_success:
-                return jsonify({'error': 'Failed to create user in B2'}), 500
-            
-            logger.info(f"✓ Created user: {target_email}")
-            
-            return jsonify({
-                'success': True,
-                'message': 'User created and password set successfully'
-            }), 201
-        else:
-            # Update existing user's password
-            user['password'] = bcrypt.generate_password_hash(new_password).decode('utf-8')
-            user['updated_at'] = datetime.now().isoformat()
-            
-            data_store.users[user_index] = user
-            save_success = data_store.save_users()
-            
-            if not save_success:
-                return jsonify({'error': 'Failed to update password in B2'}), 500
-            
-            logger.info(f"✓ Password updated for user: {target_email}")
-            
-            return jsonify({
-                'success': True,
-                'message': 'Password updated successfully'
-            }), 200
-        
-    except Exception as e:
-        logger.error(f"Error updating Karanja password: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/auth/change-password', methods=['POST'])
-@jwt_required()
-def change_password():
-    """Change user password - JWT REQUIRED"""
-    try:
-        current_user_id = get_jwt_identity()
-        data = request.get_json()
-        
-        current_password = data.get('currentPassword')
-        new_password = data.get('newPassword')
-        
-        if not current_password or not new_password:
-            return jsonify({'error': 'Current password and new password are required'}), 400
-        
-        if len(new_password) < 6:
-            return jsonify({'error': 'New password must be at least 6 characters long'}), 400
-        
-        data_store.load_all_data()
-        
-        # Find user
-        user_index = -1
-        user = None
-        for i, u in enumerate(data_store.users):
-            if str(u['id']) == current_user_id:
-                user_index = i
-                user = u
-                break
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        # Verify current password
-        if not bcrypt.check_password_hash(user['password'], current_password):
-            return jsonify({'error': 'Current password is incorrect'}), 401
-        
-        # Update password
-        user['password'] = bcrypt.generate_password_hash(new_password).decode('utf-8')
-        user['updated_at'] = datetime.now().isoformat()
-        
-        # Save updated user
-        data_store.users[user_index] = user
-        save_success = data_store.save_users()
-        
-        if not save_success:
-            return jsonify({'error': 'Failed to save password change to B2'}), 500
-        
-        # Add notification
-        notification = {
-            'id': int(datetime.now().timestamp() * 1000),
-            'message': 'Password changed successfully',
-            'type': 'success',
-            'timestamp': datetime.now().isoformat(),
-            'read': False
-        }
-        data_store.notifications.insert(0, notification)
-        data_store.save_notifications()
-        
-        logger.info(f"✓ Password changed for user: {user['email']}")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Password changed successfully'
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Error changing password: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# ==================== AUTHENTICATION ROUTES ====================
+# ==================== AUTHENTICATION ROUTES (CONSTANT CREDENTIALS) ====================
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    """Authenticate user and return JWT token"""
+    """Authenticate user with CONSTANT credentials only"""
     try:
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
         
+        logger.info(f"Login attempt - Email: {email}")
+        
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
         
-        data_store.load_all_data()
-        user = next((u for u in data_store.users if u['email'].lower() == email.lower()), None)
-        
-        if user and bcrypt.check_password_hash(user['password'], password):
+        # ONLY check against constant credentials
+        if email.upper() == CONSTANT_EMAIL and password == CONSTANT_PASSWORD:
+            # Generate JWT token
             access_token = create_access_token(
-                identity=str(user['id']),
+                identity=CONSTANT_USER_ID,
                 additional_claims={
-                    'email': user['email'],
-                    'name': user['name'],
-                    'role': user['role']
+                    'email': CONSTANT_EMAIL,
+                    'name': CONSTANT_USER_NAME,
+                    'role': CONSTANT_USER_ROLE
                 }
             )
+            
+            logger.info(f"✓ Login successful for {CONSTANT_EMAIL}")
             
             return jsonify({
                 'success': True,
                 'token': access_token,
                 'user': {
-                    'id': user['id'],
-                    'email': user['email'],
-                    'name': user['name'],
-                    'role': user['role']
+                    'id': CONSTANT_USER_ID,
+                    'email': CONSTANT_EMAIL,
+                    'name': CONSTANT_USER_NAME,
+                    'role': CONSTANT_USER_ROLE
                 }
             }), 200
         
+        # If credentials don't match constant ones, return error
+        logger.warning(f"Login failed - Invalid credentials for {email}")
         return jsonify({'error': 'Invalid credentials'}), 401
         
     except Exception as e:
@@ -623,21 +439,15 @@ def login():
 @app.route('/api/auth/me', methods=['GET'])
 @jwt_required()
 def get_current_user():
-    """Get current authenticated user"""
+    """Get current authenticated user - always returns constant user"""
     try:
-        current_user_id = get_jwt_identity()
-        data_store.load_all_data()
-        user = next((u for u in data_store.users if str(u['id']) == current_user_id), None)
-        
-        if user:
-            return jsonify({
-                'id': user['id'],
-                'email': user['email'],
-                'name': user['name'],
-                'role': user['role']
-            }), 200
-        
-        return jsonify({'error': 'User not found'}), 404
+        # Always return the constant user
+        return jsonify({
+            'id': CONSTANT_USER_ID,
+            'email': CONSTANT_EMAIL,
+            'name': CONSTANT_USER_NAME,
+            'role': CONSTANT_USER_ROLE
+        }), 200
         
     except Exception as e:
         logger.error(f"Error getting current user: {e}")
@@ -1420,7 +1230,10 @@ if __name__ == '__main__':
     logger.info(f"  Products: {len(data_store.products)}")
     logger.info(f"  Sales: {len(data_store.sales)}")
     logger.info(f"  Images: {len(data_store.b2_images)}")
-    logger.info(f"  Users: {len(data_store.users)}")
+    logger.info("=" * 70)
+    logger.info("✓ CONSTANT LOGIN CREDENTIALS (NEVER CHANGE):")
+    logger.info(f"  Email: {CONSTANT_EMAIL}")
+    logger.info(f"  Password: {CONSTANT_PASSWORD}")
     logger.info("=" * 70)
     logger.info("✓ CROSS-DEVICE SYNC ENABLED - Data is the same on phone, tablet, and PC")
     logger.info("=" * 70)
@@ -1429,7 +1242,6 @@ if __name__ == '__main__':
     logger.info("  - GET  /api/public/health")
     logger.info("  - GET  /api/public/b2/info")
     logger.info("  - POST /api/auth/login")
-    logger.info("  - POST /api/auth/update-karanja-password")
     logger.info("=" * 70)
     
     app.run(host='0.0.0.0', port=port, debug=False)
