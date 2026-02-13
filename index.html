@@ -1809,6 +1809,17 @@
     </style>
 </head>
 <body>
+    <!-- PREVENT REFRESH LOOP - ADDED IMMEDIATELY AFTER BODY OPEN -->
+    <script>
+        // Prevent refresh loop - check if we're already on dashboard
+        if (localStorage.getItem('karanjaLoggedIn') === 'true' && 
+            window.location.pathname === '/' && 
+            !window.location.hash) {
+            // Already logged in and on root - don't refresh
+            console.log('✅ Already logged in, preventing refresh loop');
+        }
+    </script>
+
     <!-- Login Page -->
     <div id="loginPage" class="login-container">
         <div class="login-card">
@@ -2872,10 +2883,13 @@
     </div>
 
     <script>
-        // ==================== API SERVICE - CONNECT TO FLASK BACKEND ====================
+        // ==================== API SERVICE - FIXED BASEURL ====================
         class ApiService {
             constructor() {
-                this.baseUrl = window.location.origin;
+                // Use relative URL - this will work with the same domain
+                this.baseUrl = '';
+                // OR if you need absolute URL:
+                // this.baseUrl = window.location.origin;
                 this.token = localStorage.getItem('karanjaToken');
             }
 
@@ -2885,7 +2899,8 @@
             }
 
             async request(endpoint, options = {}) {
-                const url = `${this.baseUrl}${endpoint}`;
+                // Use relative URL - no need to add baseUrl
+                const url = endpoint;
                 const headers = {
                     'Content-Type': 'application/json',
                     ...options.headers
@@ -2903,11 +2918,14 @@
 
                     if (!response.ok) {
                         if (response.status === 401) {
-                            // Token expired, redirect to login
+                            // Token expired, redirect to login with timeout to avoid refresh loop
                             localStorage.removeItem('karanjaToken');
                             localStorage.removeItem('karanjaLoggedIn');
                             localStorage.removeItem('karanjaUserData');
-                            window.location.reload();
+                            // Don't reload immediately - avoid refresh loop
+                            setTimeout(() => {
+                                window.location.href = '/';
+                            }, 100);
                             throw new Error('Session expired');
                         }
                         throw new Error(`API error: ${response.status}`);
@@ -2946,7 +2964,7 @@
             }
 
             async createProduct(formData) {
-                const url = `${this.baseUrl}/api/products`;
+                const url = '/api/products';
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: {
@@ -2958,7 +2976,7 @@
             }
 
             async updateProduct(productId, formData) {
-                const url = `${this.baseUrl}/api/products/${productId}`;
+                const url = `/api/products/${productId}`;
                 const response = await fetch(url, {
                     method: 'PUT',
                     headers: {
@@ -3009,7 +3027,7 @@
 
             // B2 endpoints
             async uploadToB2(file) {
-                const url = `${this.baseUrl}/api/b2/upload`;
+                const url = '/api/b2/upload';
                 const formData = new FormData();
                 formData.append('image', file);
                 
@@ -3059,6 +3077,14 @@
             }
 
             async checkLogin() {
+                const loginPage = document.getElementById('loginPage');
+                const dashboardPage = document.getElementById('dashboardPage');
+                
+                // Check if we're already on dashboard and trying to check auth
+                if (dashboardPage && dashboardPage.style.display === 'flex') {
+                    return true; // Already showing dashboard, don't redirect
+                }
+                
                 if (this.isLoggedIn && this.api.token) {
                     try {
                         const user = await this.api.getCurrentUser();
@@ -3749,6 +3775,11 @@
             async checkAuthentication() {
                 const loginPage = document.getElementById('loginPage');
                 const dashboardPage = document.getElementById('dashboardPage');
+                
+                // Check if we're already on dashboard and trying to check auth
+                if (dashboardPage && dashboardPage.style.display === 'flex') {
+                    return; // Already showing dashboard, don't redirect
+                }
                 
                 const isLoggedIn = await this.auth.checkLogin();
                 
