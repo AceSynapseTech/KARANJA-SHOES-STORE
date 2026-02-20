@@ -153,9 +153,11 @@ def optional_jwt_required():
 def get_table_data(table_name):
     """Get all data from a Supabase table"""
     if not supabase:
+        logger.error(f"Supabase not available for {table_name}")
         return []
     try:
         response = supabase.table(table_name).select("*").execute()
+        logger.info(f"✓ Retrieved {len(response.data)} records from {table_name}")
         return response.data
     except Exception as e:
         logger.error(f"Error reading from {table_name}: {e}")
@@ -164,30 +166,32 @@ def get_table_data(table_name):
 def save_table_data(table_name, data):
     """Save data to Supabase table (upsert)"""
     if not supabase:
+        logger.error(f"Supabase not available for saving to {table_name}")
         return False
     try:
-        # For upsert, we need to handle each record
-        for record in data:
-            # Check if record exists
-            existing = supabase.table(table_name).select("*").eq("id", record["id"]).execute()
-            if existing.data:
-                # Update existing
-                supabase.table(table_name).update(record).eq("id", record["id"]).execute()
-            else:
-                # Insert new
-                supabase.table(table_name).insert(record).execute()
-        logger.info(f"✓ Successfully saved to {table_name}")
+        if isinstance(data, list):
+            # For list of records
+            for record in data:
+                result = supabase.table(table_name).upsert(record).execute()
+                logger.info(f"✓ Upserted record to {table_name}: {record.get('id', 'unknown')}")
+        else:
+            # For single record
+            result = supabase.table(table_name).upsert(data).execute()
+            logger.info(f"✓ Upserted single record to {table_name}: {data.get('id', 'unknown')}")
+        
         return True
     except Exception as e:
         logger.error(f"✗ Error saving to {table_name}: {e}")
+        logger.error(traceback.format_exc())
         return False
 
 def delete_table_data(table_name, record_id):
     """Delete data from Supabase table"""
     if not supabase:
+        logger.error(f"Supabase not available for deleting from {table_name}")
         return False
     try:
-        supabase.table(table_name).delete().eq("id", record_id).execute()
+        result = supabase.table(table_name).delete().eq("id", record_id).execute()
         logger.info(f"✓ Successfully deleted from {table_name}: {record_id}")
         return True
     except Exception as e:
@@ -217,6 +221,8 @@ def upload_to_supabase_storage(file, folder="products"):
         if not content_type:
             content_type = mimetypes.guess_type(file.filename)[0] or 'image/jpeg'
         
+        logger.info(f"Uploading to Supabase: {unique_filename} ({len(file_data)} bytes)")
+        
         # Upload to Supabase Storage
         response = supabase.storage.from_(STORAGE_BUCKET).upload(
             path=unique_filename,
@@ -227,7 +233,6 @@ def upload_to_supabase_storage(file, folder="products"):
         logger.info(f"✓ Successfully uploaded to Supabase: {unique_filename}")
         
         # Generate public URL (signed URL for private bucket)
-        # For private buckets, we'll use signed URLs
         signed_url = supabase.storage.from_(STORAGE_BUCKET).create_signed_url(
             unique_filename, 
             expires_in=3600  # 1 hour
@@ -236,34 +241,13 @@ def upload_to_supabase_storage(file, folder="products"):
         return {
             'path': unique_filename,
             'signed_url': signed_url['signedURL'] if signed_url else None,
-            'public_url': f"/api/images/{unique_filename}"  # We'll proxy through our API
+            'proxy_url': f"/api/images/{unique_filename}"
         }, None
         
     except Exception as e:
         logger.error(f"Error uploading to Supabase: {e}")
         logger.error(traceback.format_exc())
         return None, str(e)
-
-def get_image_url(path, signed=True, expires_in=3600):
-    """Get URL for an image from Supabase Storage"""
-    if not supabase or not path:
-        return '/static/placeholder.png'
-    
-    try:
-        if signed:
-            # Generate signed URL (for private buckets)
-            signed_url = supabase.storage.from_(STORAGE_BUCKET).create_signed_url(
-                path, 
-                expires_in=expires_in
-            )
-            return signed_url['signedURL'] if signed_url else '/static/placeholder.png'
-        else:
-            # For public buckets (if we ever make it public)
-            public_url = supabase.storage.from_(STORAGE_BUCKET).get_public_url(path)
-            return public_url
-    except Exception as e:
-        logger.error(f"Error getting image URL for {path}: {e}")
-        return '/static/placeholder.png'
 
 def delete_from_supabase_storage(path):
     """Delete an image from Supabase Storage"""
@@ -297,6 +281,7 @@ def proxy_image(image_path):
         )
         
         if not signed_url:
+            logger.warning(f"Could not generate signed URL for {image_path}")
             return send_file('static/placeholder.png')
         
         # Fetch the image from Supabase
@@ -491,6 +476,7 @@ def get_products():
             
             products_copy.append(product_copy)
         
+        logger.info(f"Returning {len(products_copy)} products")
         return jsonify(products_copy), 200
         
     except Exception as e:
@@ -561,10 +547,17 @@ def create_product():
         
         if image_path:
             product['image_path'] = image_path
-            product['image'] = f"/api/images/{image_path}"
         
         # Save to Supabase
-        save_table_data('products', [product])
+        logger.info(f"Attempting to save product: {product}")
+        success = save_table_data('products', product)
+        
+        if not success:
+            return jsonify({'error': 'Failed to save to Supabase'}), 500
+        
+        # Add image URL for response
+        if image_path:
+            product['image'] = f"/api/images/{image_path}"
         
         logger.info(f"✓ Product created successfully: {name} (ID: {product_id})")
         
@@ -646,12 +639,18 @@ def update_product(product_id):
                 delete_from_supabase_storage(product['image_path'])
             
             product['image_path'] = image_path
-            product['image'] = f"/api/images/{image_path}"
         
         product['lastUpdated'] = datetime.now().isoformat()
         
         # Save to Supabase
-        save_table_data('products', [product])
+        success = save_table_data('products', product)
+        
+        if not success:
+            return jsonify({'error': 'Failed to save to Supabase'}), 500
+        
+        # Add image URL for response
+        if product.get('image_path'):
+            product['image'] = f"/api/images/{product['image_path']}"
         
         logger.info(f"✓ Product updated successfully: {product['name']} (ID: {product_id})")
         
@@ -673,13 +672,11 @@ def delete_product(product_id):
         # Get product to find image path
         products = get_table_data('products')
         product_to_delete = None
-        remaining_products = []
         
         for p in products:
             if p['id'] == product_id:
                 product_to_delete = p
-            else:
-                remaining_products.append(p)
+                break
         
         if not product_to_delete:
             return jsonify({'error': 'Product not found'}), 404
@@ -688,10 +685,11 @@ def delete_product(product_id):
         if product_to_delete.get('image_path'):
             delete_from_supabase_storage(product_to_delete['image_path'])
         
-        # Save remaining products back to Supabase
-        # For simplicity, we'll rewrite the whole table
-        # In production, you might want to use a proper delete operation
-        supabase.table('products').delete().eq('id', product_id).execute()
+        # Delete from database
+        success = delete_table_data('products', product_id)
+        
+        if not success:
+            return jsonify({'error': 'Failed to delete from Supabase'}), 500
         
         logger.info(f"✓ Product deleted successfully: {product_to_delete['name']} (ID: {product_id})")
         
@@ -795,7 +793,7 @@ def create_sale():
         product['lastUpdated'] = datetime.now().isoformat()
         
         # Save updated product
-        save_table_data('products', [product])
+        save_table_data('products', product)
         
         total_amount = unit_price * quantity
         total_cost = product['buyPrice'] * quantity
@@ -820,7 +818,7 @@ def create_sale():
         }
         
         # Save sale
-        save_table_data('sales', [sale])
+        save_table_data('sales', sale)
         
         logger.info(f"✓ Sale recorded: {product['name']} - {quantity} x Size {size} @ {unit_price}")
         
@@ -911,19 +909,45 @@ def list_bucket():
         logger.error(f"Error listing bucket: {e}")
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
+@app.route('/api/debug/check-db', methods=['GET'])
+@jwt_required()
+def debug_check_db():
+    """Check what's in the database"""
+    try:
+        products = get_table_data('products')
+        return jsonify({
+            'product_count': len(products),
+            'products': products,
+            'table_exists': True,
+            'supabase_connected': SUPABASE_AVAILABLE
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'table_exists': False,
+            'supabase_connected': SUPABASE_AVAILABLE
+        }), 500
+
 # ==================== HEALTH CHECK ====================
 
 @app.route('/api/health', methods=['GET'])
 @jwt_required()
 def health_check():
     """Health check endpoint"""
+    product_count = 0
+    try:
+        products = get_table_data('products')
+        product_count = len(products)
+    except:
+        pass
+        
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
         'app': 'Karanja Shoe Store',
         'supabase': 'connected' if SUPABASE_AVAILABLE else 'disconnected',
-        'products': len(get_table_data('products')),
-        'sales': len(get_table_data('sales')),
+        'products': product_count,
+        'sales': len(get_table_data('sales')) if SUPABASE_AVAILABLE else 0,
         'storage_type': 'supabase'
     }), 200
 
