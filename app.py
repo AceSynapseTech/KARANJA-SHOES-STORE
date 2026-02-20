@@ -125,6 +125,40 @@ except Exception as e:
     B2_AVAILABLE = False
     b2_client = None
 
+# ==================== ENSURE FOLDERS EXIST ====================
+def ensure_folders():
+    """Ensure required folders exist in B2 bucket"""
+    if not b2_client:
+        return False
+    
+    folders = ['data', 'products']
+    created = []
+    
+    for folder in folders:
+        try:
+            test_key = f"{folder}/.keep"
+            try:
+                b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=test_key)
+                logger.info(f"✓ {folder} folder already exists")
+            except ClientError:
+                # Create the folder by uploading a dummy file
+                b2_client.put_object(
+                    Bucket=B2_CONFIG['BUCKET_NAME'],
+                    Key=test_key,
+                    Body=b'',
+                    ContentType='text/plain'
+                )
+                logger.info(f"✓ Created {folder} folder in B2")
+                created.append(folder)
+        except Exception as e:
+            logger.error(f"Error ensuring {folder} folder: {e}")
+    
+    return created
+
+# Call this after initializing B2
+if B2_AVAILABLE and b2_client:
+    ensure_folders()
+
 # ==================== EXTENSIONS ====================
 CORS(app, resources={
     r"/api/*": {
@@ -637,6 +671,19 @@ def upload_to_b2():
         return jsonify({'error': 'Backblaze B2 is not configured'}), 503
     
     try:
+        # Ensure products folder exists
+        try:
+            b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key='products/.keep')
+        except ClientError:
+            # Create products folder if it doesn't exist
+            b2_client.put_object(
+                Bucket=B2_CONFIG['BUCKET_NAME'],
+                Key='products/.keep',
+                Body=b'',
+                ContentType='text/plain'
+            )
+            logger.info("✓ Created products folder in B2")
+        
         if 'image' not in request.files:
             logger.error("No image file in request")
             return jsonify({'error': 'No image file provided'}), 400
@@ -1329,7 +1376,7 @@ def test_upload():
     
     try:
         # Try to upload a small test file
-        test_key = f"test/test-file-{int(datetime.now().timestamp())}.txt"
+        test_key = f"products/test-file-{int(datetime.now().timestamp())}.txt"
         test_content = b"Test upload from Karanja Shoe Store - " + str(datetime.now()).encode()
         
         b2_client.put_object(
