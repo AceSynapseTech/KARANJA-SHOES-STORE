@@ -328,7 +328,6 @@ class B2DataStore:
 # Initialize Data Store
 if not B2_AVAILABLE or not b2_client:
     logger.error("✗ Backblaze B2 is required for data storage. Please check your credentials.")
-    # Don't raise exception, continue with limited functionality
     logger.warning("Continuing without B2 - only static files will work")
     data_store = None
 else:
@@ -597,12 +596,14 @@ def upload_to_b2():
             data_store.b2_images.append(image_record)
             data_store.save_b2_images()
         
+        # Return both url and image field for compatibility
         return jsonify({
             'success': True,
-            'url': signed_url,  # Return signed URL for direct display
+            'url': signed_url,  # This is what the frontend expects
             'signed_url': signed_url,
             'fileName': unique_filename,
-            's3_key': s3_key
+            's3_key': s3_key,
+            'image': signed_url  # Also include image field for compatibility
         }), 200
         
     except Exception as e:
