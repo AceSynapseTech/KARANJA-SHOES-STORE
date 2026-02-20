@@ -14,6 +14,8 @@ import mimetypes
 import logging
 import traceback
 from functools import wraps
+import requests
+from urllib.parse import urlparse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +26,7 @@ app = Flask(__name__)
 # ==================== CONFIGURATION ====================
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'karanja-shoe-store-secret-key-2026')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'karanja-jwt-secret-key-2026')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)  # Extended token expiry
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20MB
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['STATIC_FOLDER'] = 'static'
@@ -34,7 +36,6 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('static', exist_ok=True)
 
 # ==================== CONSTANT LOGIN CREDENTIALS ====================
-# THESE CREDENTIALS WILL NEVER CHANGE
 CONSTANT_EMAIL = "KARANJASHOESTORE@GMAIL.COM"
 CONSTANT_PASSWORD = "0726539216"
 CONSTANT_USER_ID = "1"
@@ -43,7 +44,6 @@ CONSTANT_USER_ROLE = "admin"
 
 # ==================== BACKBLAZE B2 CONFIGURATION ====================
 B2_CONFIG = {
-    # BUCKET INFORMATION
     'BUCKET_NAME': os.environ.get('B2_BUCKET_NAME', 'KARANJASH'),
     'BUCKET_ID': os.environ.get('B2_BUCKET_ID', '325093e8d52f70a795cd0d15'),
     'ENDPOINT': os.environ.get('B2_ENDPOINT', 's3.eu-central-003.backblazeb2.com'),
@@ -55,11 +55,9 @@ B2_CONFIG = {
     'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', '00320385f075dd50000000002'),
     'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', 'K0034O1CRh5jaFZRSwDBEf5e40lGJhY'),
     
-    # BUCKET STATUS
     'TYPE': 'Private',
     'ENCRYPTION': 'Enabled',
     
-    # DATA STORAGE PATHS IN B2
     'DATA_PATHS': {
         'PRODUCTS': 'data/products.json',
         'SALES': 'data/sales.json',
@@ -89,7 +87,7 @@ try:
     logger.info("✓ Backblaze B2 client initialized successfully")
     B2_AVAILABLE = True
     
-    # Test the connection by listing buckets
+    # Test the connection
     b2_client.list_buckets()
     logger.info(f"✓ Successfully connected to B2 bucket: {B2_CONFIG['BUCKET_NAME']}")
     
@@ -126,7 +124,6 @@ app.json_encoder = CustomJSONEncoder
 
 # ==================== OPTIONAL JWT DECORATOR ====================
 def optional_jwt_required():
-    """Decorator that doesn't require JWT but will set current_user if valid"""
     def wrapper(fn):
         @wraps(fn)
         def decorator(*args, **kwargs):
@@ -140,8 +137,6 @@ def optional_jwt_required():
 
 # ==================== B2 DATA STORAGE MANAGER ====================
 class B2DataStore:
-    """All data stored in Backblaze B2 - Fixed version with proper error handling"""
-    
     def __init__(self, b2_client, bucket_name):
         self.b2_client = b2_client
         self.bucket_name = bucket_name
@@ -150,7 +145,6 @@ class B2DataStore:
         self.load_all_data()
     
     def _ensure_data_directory(self):
-        """Ensure the data directory exists in B2"""
         if not self.b2_client:
             return False
         try:
@@ -170,7 +164,6 @@ class B2DataStore:
             return False
     
     def _read_json_from_b2(self, b2_key):
-        """Read JSON data from B2 bucket"""
         if not self.b2_client:
             return {}
         try:
@@ -191,7 +184,6 @@ class B2DataStore:
             return {}
     
     def _write_json_to_b2(self, b2_key, data):
-        """Write JSON data to B2 bucket"""
         if not self.b2_client:
             return False
         try:
@@ -210,7 +202,6 @@ class B2DataStore:
             return False
     
     def load_all_data(self):
-        """Load all data from B2 into cache"""
         if not self.b2_client:
             return
         
@@ -327,7 +318,96 @@ if not B2_AVAILABLE or not b2_client:
 data_store = B2DataStore(b2_client, B2_CONFIG['BUCKET_NAME'])
 logger.info("✓ Using Backblaze B2 for ALL data storage")
 
-# ==================== PUBLIC ENDPOINTS (NO JWT REQUIRED) ====================
+# ==================== IMPROVED SIGNED URL GENERATION ====================
+
+def generate_signed_url(s3_key, expiration=604800):
+    """
+    Generate a pre-signed URL for private B2 bucket access
+    expiration: time in seconds (default 7 days)
+    """
+    if not b2_client or not s3_key:
+        return None
+    try:
+        # Clean the s3_key - remove any leading slashes
+        if s3_key.startswith('/'):
+            s3_key = s3_key[1:]
+        
+        # Generate the signed URL
+        url = b2_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': B2_CONFIG['BUCKET_NAME'],
+                'Key': s3_key
+            },
+            ExpiresIn=expiration,
+            HttpMethod='GET'
+        )
+        
+        # Log successful generation
+        logger.info(f"✓ Generated signed URL for: {s3_key}")
+        return url
+    except Exception as e:
+        logger.error(f"Error generating signed URL for {s3_key}: {e}")
+        return None
+
+def extract_s3_key_from_url(url):
+    """Extract S3 key from B2 URL"""
+    if not url:
+        return None
+    try:
+        # Handle different URL formats
+        if 'backblazeb2.com' in url:
+            # Parse the URL to get the path
+            parsed = urlparse(url)
+            path = parsed.path
+            
+            # Remove leading slash and bucket name if present
+            if path.startswith('/file/' + B2_CONFIG['BUCKET_NAME'] + '/'):
+                key = path.replace('/file/' + B2_CONFIG['BUCKET_NAME'] + '/', '')
+            elif path.startswith('/' + B2_CONFIG['BUCKET_NAME'] + '/'):
+                key = path.replace('/' + B2_CONFIG['BUCKET_NAME'] + '/', '')
+            elif '/products/' in path:
+                # Extract from products path
+                import re
+                match = re.search(r'/products/[^?]+', path)
+                if match:
+                    key = match.group(0).lstrip('/')
+                else:
+                    key = path.lstrip('/')
+            else:
+                key = path.lstrip('/')
+            
+            # Remove query parameters
+            if '?' in key:
+                key = key.split('?')[0]
+            
+            logger.info(f"Extracted key: {key} from URL: {url}")
+            return key
+        
+        # If it's just a key
+        if url.startswith('products/'):
+            return url
+        
+        return None
+    except Exception as e:
+        logger.error(f"Error extracting S3 key from {url}: {e}")
+        return None
+
+def verify_image_exists(s3_key):
+    """Verify that an image exists in B2"""
+    if not b2_client or not s3_key:
+        return False
+    try:
+        b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
+        return True
+    except ClientError as e:
+        if e.response['Error']['Code'] == '404':
+            logger.warning(f"Image not found in B2: {s3_key}")
+        else:
+            logger.error(f"Error checking image {s3_key}: {e}")
+        return False
+
+# ==================== PUBLIC ENDPOINTS ====================
 
 @app.route('/api/public/products', methods=['GET'])
 def get_public_products():
@@ -341,15 +421,29 @@ def get_public_products():
         products_copy = []
         for product in products:
             product_copy = product.copy()
+            
+            # Remove sensitive data
             product_copy.pop('buyPrice', None)
             product_copy.pop('createdBy', None)
             product_copy.pop('minSellPrice', None)
             product_copy.pop('maxSellPrice', None)
             
+            # Generate fresh signed URL for image
             if product.get('s3_key'):
-                fresh_url = generate_signed_url(product['s3_key'], expiration=86400)
-                if fresh_url:
-                    product_copy['image'] = fresh_url
+                if verify_image_exists(product['s3_key']):
+                    fresh_url = generate_signed_url(product['s3_key'], expiration=86400)  # 24 hours
+                    if fresh_url:
+                        product_copy['image'] = fresh_url
+                        product_copy['imageUrl'] = fresh_url
+                        logger.info(f"Generated image URL for product {product['id']}")
+                    else:
+                        product_copy['image'] = '/static/placeholder.png'
+                        logger.warning(f"Failed to generate URL for product {product['id']}")
+                else:
+                    product_copy['image'] = '/static/placeholder.png'
+                    logger.warning(f"Image not found for product {product['id']}")
+            else:
+                product_copy['image'] = '/static/placeholder.png'
             
             products_copy.append(product_copy)
         
@@ -361,7 +455,7 @@ def get_public_products():
 
 @app.route('/api/public/health', methods=['GET'])
 def public_health_check():
-    """Public health check endpoint - NO LOGIN REQUIRED"""
+    """Public health check endpoint"""
     try:
         data_store.load_all_data()
         
@@ -380,7 +474,7 @@ def public_health_check():
 
 @app.route('/api/public/b2/info', methods=['GET'])
 def get_public_b2_info():
-    """Public B2 info endpoint - NO LOGIN REQUIRED"""
+    """Public B2 info endpoint"""
     try:
         return jsonify({
             'bucketName': B2_CONFIG['BUCKET_NAME'],
@@ -395,7 +489,51 @@ def get_public_b2_info():
         logger.error(f"Error getting B2 info: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== AUTHENTICATION ROUTES (CONSTANT CREDENTIALS) ====================
+# ==================== IMAGE PROXY ENDPOINT ====================
+
+@app.route('/api/images/<path:s3_key>', methods=['GET'])
+def proxy_image(s3_key):
+    """Proxy endpoint to serve images from B2"""
+    try:
+        if not b2_client:
+            return jsonify({'error': 'B2 not configured'}), 503
+        
+        # Decode the s3_key if it was URL encoded
+        from urllib.parse import unquote
+        s3_key = unquote(s3_key)
+        
+        logger.info(f"Proxying image request for: {s3_key}")
+        
+        # Get the image from B2
+        response = b2_client.get_object(
+            Bucket=B2_CONFIG['BUCKET_NAME'],
+            Key=s3_key
+        )
+        
+        # Get the image data
+        image_data = response['Body'].read()
+        
+        # Determine content type
+        content_type = response.get('ContentType', 'image/jpeg')
+        
+        # Create response with image data
+        img_response = make_response(image_data)
+        img_response.headers['Content-Type'] = content_type
+        img_response.headers['Cache-Control'] = 'public, max-age=86400'  # 24 hours
+        
+        return img_response
+        
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            logger.error(f"Image not found in B2: {s3_key}")
+            return send_file('static/placeholder.png')
+        logger.error(f"Error proxying image {s3_key}: {e}")
+        return send_file('static/placeholder.png')
+    except Exception as e:
+        logger.error(f"Error proxying image {s3_key}: {e}")
+        return send_file('static/placeholder.png')
+
+# ==================== AUTHENTICATION ROUTES ====================
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
@@ -410,9 +548,7 @@ def login():
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
         
-        # ONLY check against constant credentials
         if email.upper() == CONSTANT_EMAIL and password == CONSTANT_PASSWORD:
-            # Generate JWT token
             access_token = create_access_token(
                 identity=CONSTANT_USER_ID,
                 additional_claims={
@@ -435,7 +571,6 @@ def login():
                 }
             }), 200
         
-        # If credentials don't match constant ones, return error
         logger.warning(f"Login failed - Invalid credentials for {email}")
         return jsonify({'error': 'Invalid credentials'}), 401
         
@@ -446,9 +581,8 @@ def login():
 @app.route('/api/auth/me', methods=['GET'])
 @jwt_required()
 def get_current_user():
-    """Get current authenticated user - always returns constant user"""
+    """Get current authenticated user"""
     try:
-        # Always return the constant user
         return jsonify({
             'id': CONSTANT_USER_ID,
             'email': CONSTANT_EMAIL,
@@ -462,7 +596,7 @@ def get_current_user():
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
-    """Logout user - client should discard token"""
+    """Logout user"""
     return jsonify({'success': True, 'message': 'Logged out successfully'}), 200
 
 # ==================== BACKBLAZE B2 UPLOAD ROUTE ====================
@@ -470,7 +604,7 @@ def logout():
 @app.route('/api/b2/upload', methods=['POST'])
 @jwt_required()
 def upload_to_b2():
-    """Upload image to Backblaze B2 Private Bucket - JWT REQUIRED"""
+    """Upload image to Backblaze B2 Private Bucket"""
     if not b2_client:
         return jsonify({'error': 'Backblaze B2 is not configured'}), 503
     
@@ -483,6 +617,7 @@ def upload_to_b2():
         if file.filename == '':
             return jsonify({'error': 'No image selected'}), 400
         
+        # Generate unique filename
         timestamp = int(datetime.now().timestamp())
         safe_filename = secure_filename(file.filename)
         unique_filename = f"{timestamp}_{safe_filename}"
@@ -492,6 +627,7 @@ def upload_to_b2():
         if not content_type:
             content_type = mimetypes.guess_type(file.filename)[0] or 'image/jpeg'
         
+        # Upload to B2
         file.seek(0)
         b2_client.upload_fileobj(
             file,
@@ -510,12 +646,14 @@ def upload_to_b2():
         
         logger.info(f"✓ Successfully uploaded image to B2: {s3_key}")
         
-        signed_url = generate_signed_url(s3_key, expiration=604800)
+        # Generate proxy URL instead of signed URL
+        proxy_url = f"/api/images/{s3_key}"
         
+        # Store image record
         image_record = {
             'id': str(uuid.uuid4()),
-            'signed_url': signed_url,
             's3_key': s3_key,
+            'proxy_url': proxy_url,
             'fileName': unique_filename,
             'bucketId': B2_CONFIG['BUCKET_ID'],
             'bucketName': B2_CONFIG['BUCKET_NAME'],
@@ -527,8 +665,8 @@ def upload_to_b2():
         
         return jsonify({
             'success': True,
-            'url': signed_url,
-            'signed_url': signed_url,
+            'url': proxy_url,
+            'proxy_url': proxy_url,
             'fileName': unique_filename,
             's3_key': s3_key
         }), 200
@@ -537,50 +675,12 @@ def upload_to_b2():
         logger.error(f"Error uploading to B2: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== BACKBLAZE B2 HELPER FUNCTIONS ====================
-
-def generate_signed_url(s3_key, expiration=604800):
-    """Generate a pre-signed URL for private B2 bucket access"""
-    if not b2_client or not s3_key:
-        return None
-    try:
-        url = b2_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': B2_CONFIG['BUCKET_NAME'],
-                'Key': s3_key
-            },
-            ExpiresIn=expiration
-        )
-        return url
-    except Exception as e:
-        logger.error(f"Error generating signed URL: {e}")
-        return None
-
-def extract_s3_key_from_url(url):
-    """Extract S3 key from B2 URL"""
-    if not url:
-        return None
-    try:
-        if B2_CONFIG['CDN_URL'] in url:
-            return url.replace(f"{B2_CONFIG['CDN_URL']}/", '')
-        if 'backblazeb2.com' in url:
-            import re
-            match = re.search(r'products/[^?]+', url)
-            if match:
-                return match.group(0)
-        if url.startswith('products/'):
-            return url
-    except Exception as e:
-        logger.error(f"Error extracting S3 key: {e}")
-    return None
-
-# ==================== PRODUCT ROUTES (JWT REQUIRED) ====================
+# ==================== PRODUCT ROUTES ====================
 
 @app.route('/api/products', methods=['GET'])
 @jwt_required()
 def get_products():
-    """Get all products with fresh signed URLs - JWT REQUIRED"""
+    """Get all products with image URLs"""
     try:
         data_store.load_all_data()
         products = data_store.products
@@ -590,10 +690,17 @@ def get_products():
         products_copy = []
         for product in products:
             product_copy = product.copy()
+            
+            # Use proxy URL instead of signed URL for consistency
             if product.get('s3_key'):
-                fresh_url = generate_signed_url(product['s3_key'], expiration=86400)
-                if fresh_url:
-                    product_copy['image'] = fresh_url
+                if verify_image_exists(product['s3_key']):
+                    product_copy['image'] = f"/api/images/{product['s3_key']}"
+                    product_copy['imageUrl'] = f"/api/images/{product['s3_key']}"
+                else:
+                    product_copy['image'] = '/static/placeholder.png'
+            else:
+                product_copy['image'] = '/static/placeholder.png'
+            
             products_copy.append(product_copy)
         
         return jsonify(products_copy), 200
@@ -605,7 +712,7 @@ def get_products():
 @app.route('/api/products', methods=['POST'])
 @jwt_required()
 def create_product():
-    """Create new product - JWT REQUIRED"""
+    """Create new product"""
     try:
         name = request.form.get('name')
         price = request.form.get('price')
@@ -643,13 +750,13 @@ def create_product():
             except:
                 pass
         
+        # Extract s3_key from image_url if it's a proxy URL
         s3_key = None
-        if image_url and 'backblazeb2.com' in image_url:
-            s3_key = extract_s3_key_from_url(image_url)
-        
-        signed_url = None
-        if s3_key:
-            signed_url = generate_signed_url(s3_key, expiration=604800)
+        if image_url:
+            if '/api/images/' in image_url:
+                s3_key = image_url.replace('/api/images/', '')
+            elif 'backblazeb2.com' in image_url:
+                s3_key = extract_s3_key_from_url(image_url)
         
         product_id = int(datetime.now().timestamp() * 1000)
         
@@ -673,9 +780,9 @@ def create_product():
             'bucket': B2_CONFIG['BUCKET_NAME']
         }
         
-        if signed_url:
-            product['image'] = signed_url
+        if s3_key:
             product['s3_key'] = s3_key
+            product['image'] = f"/api/images/{s3_key}"
             product['image_source'] = 'b2'
         else:
             product['image'] = '/static/placeholder.png'
@@ -711,7 +818,7 @@ def create_product():
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
 @jwt_required()
 def update_product(product_id):
-    """Update existing product - JWT REQUIRED"""
+    """Update existing product"""
     try:
         data_store.load_all_data()
         
@@ -771,10 +878,15 @@ def update_product(product_id):
                 pass
         
         if image_url:
-            s3_key = extract_s3_key_from_url(image_url)
+            # Extract s3_key from image_url
+            if '/api/images/' in image_url:
+                s3_key = image_url.replace('/api/images/', '')
+            else:
+                s3_key = extract_s3_key_from_url(image_url)
+            
             if s3_key:
                 product['s3_key'] = s3_key
-                product['image'] = generate_signed_url(s3_key, expiration=604800)
+                product['image'] = f"/api/images/{s3_key}"
                 product['image_source'] = 'b2'
         
         product['lastUpdated'] = datetime.now().isoformat()
@@ -798,7 +910,7 @@ def update_product(product_id):
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
 @jwt_required()
 def delete_product(product_id):
-    """Delete product - JWT REQUIRED"""
+    """Delete product"""
     try:
         data_store.load_all_data()
         
@@ -840,7 +952,7 @@ def delete_product(product_id):
 
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    """Serve static files with caching"""
+    """Serve static files"""
     try:
         response = make_response(send_from_directory('static', filename))
         response.headers['Cache-Control'] = 'public, max-age=86400'
@@ -851,7 +963,7 @@ def serve_static(filename):
 
 @app.route('/static/uploads/<path:filename>')
 def serve_upload(filename):
-    """Serve uploaded files with caching"""
+    """Serve uploaded files"""
     try:
         response = make_response(send_from_directory('static/uploads', filename))
         response.headers['Cache-Control'] = 'public, max-age=86400'
@@ -860,12 +972,12 @@ def serve_upload(filename):
         logger.error(f"Error serving upload {filename}: {e}")
         return jsonify({'error': 'Uploaded file not found'}), 404
 
-# ==================== DASHBOARD STATS (JWT REQUIRED) ====================
+# ==================== DASHBOARD STATS ====================
 
 @app.route('/api/dashboard/stats', methods=['GET'])
 @jwt_required()
 def get_dashboard_stats():
-    """Get dashboard statistics - JWT REQUIRED"""
+    """Get dashboard statistics"""
     try:
         data_store.load_all_data()
         products = data_store.products
@@ -909,12 +1021,12 @@ def get_dashboard_stats():
             'storage_type': 'b2'
         }), 200
 
-# ==================== SALES ROUTES (JWT REQUIRED) ====================
+# ==================== SALES ROUTES ====================
 
 @app.route('/api/sales', methods=['POST'])
 @jwt_required()
 def create_sale():
-    """Record new sale - JWT REQUIRED"""
+    """Record new sale"""
     try:
         data = request.get_json()
         
@@ -1004,7 +1116,7 @@ def create_sale():
 @app.route('/api/sales', methods=['GET'])
 @jwt_required()
 def get_sales():
-    """Get all sales - JWT REQUIRED"""
+    """Get all sales"""
     try:
         data_store.load_all_data()
         sales = data_store.sales
@@ -1014,12 +1126,12 @@ def get_sales():
         logger.error(f"Error getting sales: {e}")
         return jsonify([]), 200
 
-# ==================== NOTIFICATION ROUTES (JWT REQUIRED) ====================
+# ==================== NOTIFICATION ROUTES ====================
 
 @app.route('/api/notifications', methods=['GET'])
 @jwt_required()
 def get_notifications():
-    """Get all notifications - JWT REQUIRED"""
+    """Get all notifications"""
     try:
         data_store.load_all_data()
         notifications = data_store.notifications[:50]
@@ -1031,7 +1143,7 @@ def get_notifications():
 @app.route('/api/notifications/count', methods=['GET'])
 @jwt_required()
 def get_unread_notification_count():
-    """Get unread notification count - JWT REQUIRED"""
+    """Get unread notification count"""
     try:
         data_store.load_all_data()
         unread_count = len([n for n in data_store.notifications if not n.get('read', False)])
@@ -1043,7 +1155,7 @@ def get_unread_notification_count():
 @app.route('/api/notifications/<int:notification_id>/read', methods=['PUT'])
 @jwt_required()
 def mark_notification_read(notification_id):
-    """Mark notification as read - JWT REQUIRED"""
+    """Mark notification as read"""
     try:
         data_store.load_all_data()
         
@@ -1066,12 +1178,12 @@ def mark_notification_read(notification_id):
         logger.error(f"Error marking notification read: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ==================== B2 INFO ROUTES (JWT REQUIRED) ====================
+# ==================== B2 INFO ROUTES ====================
 
 @app.route('/api/b2/info', methods=['GET'])
 @jwt_required()
 def get_b2_info():
-    """Get Backblaze B2 bucket information - JWT REQUIRED"""
+    """Get Backblaze B2 bucket information"""
     try:
         return jsonify({
             'bucketId': B2_CONFIG['BUCKET_ID'],
@@ -1095,7 +1207,7 @@ def get_b2_info():
 @app.route('/api/health', methods=['GET'])
 @jwt_required()
 def health_check():
-    """Health check endpoint - JWT REQUIRED"""
+    """Health check endpoint"""
     try:
         data_store.load_all_data()
         
@@ -1118,7 +1230,7 @@ def health_check():
 
 @app.route('/')
 def index():
-    """Serve index.html with proper caching headers to prevent refresh loop"""
+    """Serve index.html"""
     try:
         if os.path.exists('index.html'):
             response = make_response(send_file('index.html'))
@@ -1142,7 +1254,7 @@ def index():
 
 @app.route('/<path:path>')
 def catch_all(path):
-    """Serve index.html for all non-API routes with proper headers"""
+    """Serve index.html for all non-API routes"""
     if path.startswith('api/'):
         return jsonify({'error': 'API endpoint not found'}), 404
     if path.startswith('static/'):
@@ -1245,7 +1357,8 @@ if __name__ == '__main__':
     logger.info(f"  Email: {CONSTANT_EMAIL}")
     logger.info(f"  Password: {CONSTANT_PASSWORD}")
     logger.info("=" * 70)
-    logger.info("✓ CROSS-DEVICE SYNC ENABLED - Data is the same on phone, tablet, and PC")
+    logger.info("✓ IMAGE PROXY ENDPOINT ADDED - Images will now display correctly!")
+    logger.info(f"  Image URL format: /api/images/products/filename.jpg")
     logger.info("=" * 70)
     logger.info("✓ PUBLIC ENDPOINTS AVAILABLE:")
     logger.info("  - GET  /api/public/products")
