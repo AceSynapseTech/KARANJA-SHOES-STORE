@@ -14,7 +14,6 @@ import mimetypes
 import logging
 import traceback
 from functools import wraps
-import requests
 from urllib.parse import urlparse
 
 # Configure logging
@@ -520,6 +519,7 @@ def proxy_image(s3_key):
         img_response = make_response(image_data)
         img_response.headers['Content-Type'] = content_type
         img_response.headers['Cache-Control'] = 'public, max-age=86400'  # 24 hours
+        img_response.headers['Access-Control-Allow-Origin'] = '*'
         
         return img_response
         
@@ -646,13 +646,17 @@ def upload_to_b2():
         
         logger.info(f"✓ Successfully uploaded image to B2: {s3_key}")
         
-        # Generate proxy URL instead of signed URL
+        # Generate signed URL (for direct access)
+        signed_url = generate_signed_url(s3_key, expiration=604800)
+        
+        # Generate proxy URL (for local access)
         proxy_url = f"/api/images/{s3_key}"
         
         # Store image record
         image_record = {
             'id': str(uuid.uuid4()),
             's3_key': s3_key,
+            'signed_url': signed_url,
             'proxy_url': proxy_url,
             'fileName': unique_filename,
             'bucketId': B2_CONFIG['BUCKET_ID'],
@@ -665,7 +669,8 @@ def upload_to_b2():
         
         return jsonify({
             'success': True,
-            'url': proxy_url,
+            'url': signed_url,  # Return signed URL for direct display
+            'signed_url': signed_url,
             'proxy_url': proxy_url,
             'fileName': unique_filename,
             's3_key': s3_key
@@ -691,13 +696,20 @@ def get_products():
         for product in products:
             product_copy = product.copy()
             
-            # Use proxy URL instead of signed URL for consistency
+            # Generate fresh signed URL for each request
             if product.get('s3_key'):
                 if verify_image_exists(product['s3_key']):
-                    product_copy['image'] = f"/api/images/{product['s3_key']}"
-                    product_copy['imageUrl'] = f"/api/images/{product['s3_key']}"
+                    fresh_url = generate_signed_url(product['s3_key'], expiration=86400)  # 24 hours
+                    if fresh_url:
+                        product_copy['image'] = fresh_url
+                        product_copy['imageUrl'] = fresh_url
+                        logger.info(f"Generated image URL for product {product['id']}")
+                    else:
+                        product_copy['image'] = '/static/placeholder.png'
+                        logger.warning(f"Failed to generate URL for product {product['id']}")
                 else:
                     product_copy['image'] = '/static/placeholder.png'
+                    logger.warning(f"Image not found for product {product['id']}")
             else:
                 product_copy['image'] = '/static/placeholder.png'
             
@@ -750,13 +762,13 @@ def create_product():
             except:
                 pass
         
-        # Extract s3_key from image_url if it's a proxy URL
+        # Extract s3_key from image_url if it's a B2 URL
         s3_key = None
         if image_url:
-            if '/api/images/' in image_url:
-                s3_key = image_url.replace('/api/images/', '')
-            elif 'backblazeb2.com' in image_url:
+            if 'backblazeb2.com' in image_url:
                 s3_key = extract_s3_key_from_url(image_url)
+            elif '/api/images/' in image_url:
+                s3_key = image_url.replace('/api/images/', '')
         
         product_id = int(datetime.now().timestamp() * 1000)
         
@@ -782,7 +794,9 @@ def create_product():
         
         if s3_key:
             product['s3_key'] = s3_key
-            product['image'] = f"/api/images/{s3_key}"
+            # Generate signed URL for immediate display
+            signed_url = generate_signed_url(s3_key, expiration=604800)
+            product['image'] = signed_url
             product['image_source'] = 'b2'
         else:
             product['image'] = '/static/placeholder.png'
@@ -879,14 +893,18 @@ def update_product(product_id):
         
         if image_url:
             # Extract s3_key from image_url
-            if '/api/images/' in image_url:
+            if 'backblazeb2.com' in image_url:
+                s3_key = extract_s3_key_from_url(image_url)
+            elif '/api/images/' in image_url:
                 s3_key = image_url.replace('/api/images/', '')
             else:
-                s3_key = extract_s3_key_from_url(image_url)
+                s3_key = image_url
             
             if s3_key:
                 product['s3_key'] = s3_key
-                product['image'] = f"/api/images/{s3_key}"
+                # Generate signed URL
+                signed_url = generate_signed_url(s3_key, expiration=604800)
+                product['image'] = signed_url
                 product['image_source'] = 'b2'
         
         product['lastUpdated'] = datetime.now().isoformat()
@@ -1357,8 +1375,7 @@ if __name__ == '__main__':
     logger.info(f"  Email: {CONSTANT_EMAIL}")
     logger.info(f"  Password: {CONSTANT_PASSWORD}")
     logger.info("=" * 70)
-    logger.info("✓ IMAGE PROXY ENDPOINT ADDED - Images will now display correctly!")
-    logger.info(f"  Image URL format: /api/images/products/filename.jpg")
+    logger.info("✓ SIGNED URL GENERATION ENABLED - Images will display directly from B2!")
     logger.info("=" * 70)
     logger.info("✓ PUBLIC ENDPOINTS AVAILABLE:")
     logger.info("  - GET  /api/public/products")
