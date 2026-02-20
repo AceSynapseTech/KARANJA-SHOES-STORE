@@ -526,12 +526,8 @@ def get_public_products():
                 if s3_key.startswith('/'):
                     s3_key = s3_key[1:]
                 
-                # Check if image exists (optional, can be slow)
-                # if verify_image_exists(s3_key):
                 product_copy['image'] = f"/api/images/{s3_key}"
                 product_copy['imageUrl'] = f"/api/images/{s3_key}"
-                # else:
-                #     product_copy['image'] = '/static/placeholder.png'
             else:
                 product_copy['image'] = '/static/placeholder.png'
             
@@ -862,12 +858,6 @@ def create_product():
             # Use proxy URL for display
             product['image'] = f"/api/images/{s3_key}"
             product['image_source'] = 'b2'
-            
-            # Verify image exists (optional)
-            # if verify_image_exists(s3_key):
-            #     logger.info(f"✓ Product {name} linked to existing image: {s3_key}")
-            # else:
-            #     logger.warning(f"⚠ Image not found for product {name}: {s3_key}")
         else:
             product['image'] = '/static/placeholder.png'
             product['image_source'] = 'placeholder'
@@ -1313,6 +1303,93 @@ def get_b2_info():
         'connected': B2_AVAILABLE,
         'storage_type': 'b2' if B2_AVAILABLE else 'local'
     }), 200
+
+# ==================== DEBUG ROUTES ====================
+
+@app.route('/api/debug/b2-files', methods=['GET'])
+@jwt_required()
+def debug_b2_files():
+    """Debug endpoint to list all files in B2 bucket"""
+    if not b2_client:
+        return jsonify({'error': 'B2 not connected'}), 500
+    
+    try:
+        # List objects in bucket
+        response = b2_client.list_objects_v2(
+            Bucket=B2_CONFIG['BUCKET_NAME'],
+            MaxKeys=100
+        )
+        
+        files = []
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                files.append({
+                    'key': obj['Key'],
+                    'size': obj['Size'],
+                    'last_modified': obj['LastModified'].isoformat() if obj.get('LastModified') else None
+                })
+        
+        # Also check the b2_images records
+        images_records = []
+        if data_store:
+            images_records = data_store.b2_images
+        
+        return jsonify({
+            'success': True,
+            'bucket': B2_CONFIG['BUCKET_NAME'],
+            'files_in_bucket': files,
+            'file_count': len(files),
+            'image_records': images_records,
+            'record_count': len(images_records)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+@app.route('/api/debug/test-image/<path:s3_key>', methods=['GET'])
+@jwt_required()
+def debug_test_image(s3_key):
+    """Test if an image exists in B2"""
+    if not b2_client:
+        return jsonify({'error': 'B2 not connected'}), 500
+    
+    try:
+        # Clean the key
+        if s3_key.startswith('/'):
+            s3_key = s3_key[1:]
+        
+        # Try to get object metadata
+        response = b2_client.head_object(
+            Bucket=B2_CONFIG['BUCKET_NAME'],
+            Key=s3_key
+        )
+        
+        return jsonify({
+            'success': True,
+            'key': s3_key,
+            'exists': True,
+            'metadata': {
+                'content_length': response.get('ContentLength'),
+                'content_type': response.get('ContentType'),
+                'etag': response.get('ETag'),
+                'last_modified': response.get('LastModified').isoformat() if response.get('LastModified') else None
+            }
+        }), 200
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            return jsonify({
+                'success': False,
+                'key': s3_key,
+                'exists': False,
+                'error': 'File not found in B2'
+            }), 404
+        else:
+            return jsonify({
+                'success': False,
+                'key': s3_key,
+                'error': str(e)
+            }), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ==================== HEALTH CHECK ====================
 
