@@ -44,16 +44,16 @@ CONSTANT_USER_ROLE = "admin"
 # ==================== BACKBLAZE B2 CONFIGURATION ====================
 B2_CONFIG = {
     # BUCKET INFORMATION
-    'BUCKET_NAME': os.environ.get('B2_BUCKET_NAME', 'karanjastores'),
-    'BUCKET_ID': os.environ.get('B2_BUCKET_ID', 'd33891d14fc8555f99c8001c'),
+    'BUCKET_NAME': os.environ.get('B2_BUCKET_NAME', 'karanjashoesstore'),
+    'BUCKET_ID': os.environ.get('B2_BUCKET_ID', '9240b308551f401795cd0d15'),
     'ENDPOINT': os.environ.get('B2_ENDPOINT', 's3.eu-central-003.backblazeb2.com'),
     'REGION': os.environ.get('B2_REGION', 'eu-central-003'),
-    'CDN_URL': os.environ.get('B2_CDN_URL', 'https://f005.backblazeb2.com/file/karanjastores'),
-    'CREATED_DATE': 'February 13, 2026',
+    'CDN_URL': os.environ.get('B2_CDN_URL', 'https://f005.backblazeb2.com/file/karanjashoesstore'),
+    'CREATED_DATE': 'February 9, 2026',
     
     # MASTER APPLICATION KEY
-    'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', '0033811f85f980c0000000002'),
-    'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', 'K003/3EbNC05LDHhaVS94Z3z27nuUDU'),
+    'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', '20385f075dd5'),
+    'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', '00320385f075dd50000000001'),
     
     # BUCKET STATUS
     'TYPE': 'Private',
