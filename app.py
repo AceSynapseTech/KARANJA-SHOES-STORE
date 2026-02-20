@@ -37,7 +37,6 @@ CONSTANT_EMAIL = "KARANJASHOESTORE@GMAIL.COM"
 CONSTANT_PASSWORD = "0726539216"
 CONSTANT_USER_ID = "1"
 CONSTANT_USER_NAME = "Karanja Shoe Store"
-CONSTANT_USER_ROLE = "admin"
 
 # ==================== SUPABASE CONFIGURATION ====================
 SUPABASE_URL = "https://hgcknskdvbgfiubfxdeo.supabase.co"
@@ -78,6 +77,7 @@ def get_table_data(table_name):
         return []
     try:
         response = supabase.table(table_name).select("*").execute()
+        logger.info(f"Retrieved {len(response.data)} records from {table_name}")
         return response.data
     except Exception as e:
         logger.error(f"Error reading from {table_name}: {e}")
@@ -96,6 +96,7 @@ def save_table_data(table_name, data):
         return True
     except Exception as e:
         logger.error(f"Error saving to {table_name}: {e}")
+        logger.error(traceback.format_exc())
         return False
 
 def upload_to_supabase_storage(file, folder="products"):
@@ -140,7 +141,7 @@ def proxy_image(image_path):
     if not supabase:
         return send_file('static/placeholder.png')
     try:
-        # For public bucket, just return public URL
+        # Get public URL
         public_url = supabase.storage.from_(STORAGE_BUCKET).get_public_url(image_path)
         if public_url:
             response = requests.get(public_url)
@@ -200,11 +201,18 @@ def upload_to_supabase():
 @jwt_required()
 def get_products():
     products = get_table_data('products')
-    products.sort(key=lambda x: x.get('dateAdded', ''), reverse=True)
+    products.sort(key=lambda x: x.get('dateadded', ''), reverse=True)
     
     for p in products:
         if p.get('image_path'):
             p['image'] = f"/api/images/{p['image_path']}"
+        # Add camelCase versions for frontend compatibility
+        p['buyPrice'] = p.get('buyprice', 0)
+        p['minSellPrice'] = p.get('minsellprice', 0)
+        p['maxSellPrice'] = p.get('maxsellprice', 0)
+        p['totalStock'] = p.get('totalstock', 0)
+        p['dateAdded'] = p.get('dateadded', '')
+        p['lastUpdated'] = p.get('lastupdated', '')
     
     return jsonify(products)
 
@@ -245,6 +253,7 @@ def create_product():
         
         product_id = int(datetime.now().timestamp() * 1000)
         
+        # Use lowercase column names to match database
         product = {
             'id': product_id,
             'name': name.strip(),
@@ -253,20 +262,31 @@ def create_product():
             'color': color,
             'description': description,
             'sizes': sizes,
-            'buyPrice': buy_price,
-            'minSellPrice': min_sell,
-            'maxSellPrice': max_sell,
+            'buyprice': buy_price,
+            'minsellprice': min_sell,
+            'maxsellprice': max_sell,
             'price': max_sell,
-            'totalStock': total_stock,
-            'dateAdded': datetime.now().isoformat(),
-            'lastUpdated': datetime.now().isoformat(),
+            'totalstock': total_stock,
+            'dateadded': datetime.now().isoformat(),
+            'lastupdated': datetime.now().isoformat(),
             'image_path': image_path,
             'storage': 'supabase',
-            'createdBy': get_jwt_identity()
+            'createdby': get_jwt_identity()
         }
+        
+        # Log the product data for debugging
+        logger.info(f"Product data: {json.dumps(product, default=str)}")
         
         # Save to Supabase
         if save_table_data('products', product):
+            # Add camelCase versions for response
+            product['buyPrice'] = buy_price
+            product['minSellPrice'] = min_sell
+            product['maxSellPrice'] = max_sell
+            product['totalStock'] = total_stock
+            product['dateAdded'] = product['dateadded']
+            product['lastUpdated'] = product['lastupdated']
+            
             if image_path:
                 product['image'] = f"/api/images/{image_path}"
             
@@ -277,6 +297,7 @@ def create_product():
         
     except Exception as e:
         logger.error(f"Error creating product: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
@@ -293,7 +314,7 @@ def delete_product(product_id):
 @app.route('/api/public/products', methods=['GET'])
 def get_public_products():
     products = get_table_data('products')
-    products.sort(key=lambda x: x.get('dateAdded', ''), reverse=True)
+    products.sort(key=lambda x: x.get('dateadded', ''), reverse=True)
     
     public_products = []
     for p in products:
@@ -304,7 +325,7 @@ def get_public_products():
             'category': p.get('category', ''),
             'color': p.get('color', ''),
             'price': p.get('price', 0),
-            'totalStock': p.get('totalStock', 0),
+            'totalStock': p.get('totalstock', 0),
             'sizes': p.get('sizes', {})
         }
         if p.get('image_path'):
@@ -324,7 +345,7 @@ def get_dashboard_stats():
         products = get_table_data('products')
         
         total_products = len(products)
-        total_stock = sum([p.get('totalStock', 0) for p in products])
+        total_stock = sum([p.get('totalstock', 0) for p in products])
         
         return jsonify({
             'totalProducts': total_products,
