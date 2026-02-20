@@ -15,8 +15,6 @@ import logging
 import traceback
 from functools import wraps
 from urllib.parse import urlparse
-import requests
-from io import BytesIO
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +38,7 @@ os.makedirs('static', exist_ok=True)
 placeholder_path = os.path.join('static', 'placeholder.png')
 if not os.path.exists(placeholder_path):
     try:
-        # Try to create a simple placeholder with PIL if available
+        # Create a simple placeholder with PIL if available
         try:
             from PIL import Image, ImageDraw
             img = Image.new('RGB', (300, 300), color=(102, 126, 234))
@@ -49,7 +47,7 @@ if not os.path.exists(placeholder_path):
             img.save(placeholder_path)
             logger.info("✓ Created placeholder image")
         except:
-            # If PIL not available, create a simple text file and rename
+            # If PIL not available, create a simple text file
             with open(placeholder_path, 'wb') as f:
                 f.write(b'')
             logger.warning("Created empty placeholder file")
@@ -107,11 +105,11 @@ try:
     )
     logger.info("✓ Backblaze B2 client initialized successfully")
     
-    # Test the connection by listing buckets
+    # Test the connection
     buckets = b2_client.list_buckets()
-    logger.info(f"✓ Successfully connected to B2. Available buckets: {[b['Name'] for b in buckets['Buckets']]}")
+    logger.info(f"✓ Connected to B2. Available buckets: {[b['Name'] for b in buckets['Buckets']]}")
     
-    # Test if we can access the specific bucket
+    # Test bucket access
     try:
         b2_client.head_bucket(Bucket=B2_CONFIG['BUCKET_NAME'])
         logger.info(f"✓ Successfully accessed bucket: {B2_CONFIG['BUCKET_NAME']}")
@@ -174,12 +172,9 @@ def ensure_b2_folders():
     
     return True
 
-# ==================== INITIALIZE B2 FOLDERS ====================
-# Call this function to create folders when app starts
+# Call this to create folders when app starts
 if B2_AVAILABLE and b2_client:
     ensure_b2_folders()
-else:
-    logger.warning("⚠ B2 not available - folders will not be created")
 
 # ==================== EXTENSIONS ====================
 CORS(app, resources={
@@ -413,82 +408,6 @@ else:
     data_store = B2DataStore(b2_client, B2_CONFIG['BUCKET_NAME'])
     logger.info("✓ Using Backblaze B2 for ALL data storage")
 
-# ==================== SIGNED URL GENERATION ====================
-
-def generate_signed_url(s3_key, expiration=604800):
-    """
-    Generate a pre-signed URL for private B2 bucket access
-    expiration: time in seconds (default 7 days)
-    """
-    if not b2_client or not s3_key:
-        return None
-    try:
-        # Clean the s3_key - remove any leading slashes
-        if s3_key.startswith('/'):
-            s3_key = s3_key[1:]
-        
-        # Generate the signed URL
-        url = b2_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': B2_CONFIG['BUCKET_NAME'],
-                'Key': s3_key
-            },
-            ExpiresIn=expiration,
-            HttpMethod='GET'
-        )
-        
-        logger.info(f"✓ Generated signed URL for: {s3_key}")
-        return url
-    except Exception as e:
-        logger.error(f"Error generating signed URL for {s3_key}: {e}")
-        return None
-
-def extract_s3_key_from_url(url):
-    """Extract S3 key from B2 URL"""
-    if not url:
-        return None
-    try:
-        # Handle different URL formats
-        if 'backblazeb2.com' in url:
-            parsed = urlparse(url)
-            path = parsed.path
-            
-            if path.startswith('/file/' + B2_CONFIG['BUCKET_NAME'] + '/'):
-                key = path.replace('/file/' + B2_CONFIG['BUCKET_NAME'] + '/', '')
-            elif path.startswith('/' + B2_CONFIG['BUCKET_NAME'] + '/'):
-                key = path.replace('/' + B2_CONFIG['BUCKET_NAME'] + '/', '')
-            else:
-                key = path.lstrip('/')
-            
-            if '?' in key:
-                key = key.split('?')[0]
-            
-            return key
-        elif '/api/images/' in url:
-            return url.replace('/api/images/', '')
-        
-        return url
-    except Exception as e:
-        logger.error(f"Error extracting S3 key: {e}")
-        return None
-
-def verify_image_exists(s3_key):
-    """Verify that an image exists in B2"""
-    if not b2_client or not s3_key:
-        return False
-    try:
-        # Clean the s3_key
-        if s3_key.startswith('/'):
-            s3_key = s3_key[1:]
-        
-        b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
-        logger.info(f"✓ Image exists in B2: {s3_key}")
-        return True
-    except ClientError as e:
-        logger.error(f"Image not found in B2: {s3_key} - {e}")
-        return False
-
 # ==================== IMAGE PROXY ROUTE ====================
 
 @app.route('/api/images/<path:s3_key>')
@@ -501,8 +420,11 @@ def proxy_image(s3_key):
     
     logger.info(f"Attempting to serve image: {s3_key}")
     
-    # Clean the key - don't add products/ prefix if it's already there
+    # Clean the key
     clean_key = s3_key
+    if clean_key.startswith('/'):
+        clean_key = clean_key[1:]
+    
     logger.info(f"Looking for key: {clean_key} in bucket: {B2_CONFIG['BUCKET_NAME']}")
     
     try:
@@ -532,13 +454,6 @@ def proxy_image(s3_key):
         
         if error_code == 'NoSuchKey':
             logger.warning(f"Image not found in B2: {clean_key}")
-            # List objects in the bucket to see what's there
-            try:
-                objects = b2_client.list_objects_v2(Bucket=B2_CONFIG['BUCKET_NAME'], MaxKeys=10)
-                if 'Contents' in objects:
-                    logger.info(f"Files in bucket: {[obj['Key'] for obj in objects['Contents']]}")
-            except Exception as list_error:
-                logger.error(f"Error listing bucket: {list_error}")
             return send_file('static/placeholder.png')
         elif error_code == 'AccessDenied':
             logger.error(f"Access denied to B2 bucket for key: {clean_key}")
@@ -578,7 +493,6 @@ def get_public_products():
             # Use proxy URL for images
             if product.get('s3_key'):
                 s3_key = product['s3_key']
-                # Clean the s3_key
                 if s3_key.startswith('/'):
                     s3_key = s3_key[1:]
                 
@@ -604,8 +518,7 @@ def public_health_check():
         'app': 'Karanja Shoe Store',
         'b2_bucket': B2_CONFIG['BUCKET_NAME'] if B2_AVAILABLE else 'Not connected',
         'products': len(data_store.products) if data_store else 0,
-        'storage_type': 'b2' if B2_AVAILABLE else 'local',
-        'cross_device_sync': 'enabled' if B2_AVAILABLE else 'disabled'
+        'storage_type': 'b2' if B2_AVAILABLE else 'local'
     }), 200
 
 @app.route('/api/public/b2/info', methods=['GET'])
@@ -723,7 +636,7 @@ def upload_to_b2():
         timestamp = int(datetime.now().timestamp())
         safe_filename = secure_filename(file.filename)
         unique_filename = f"{timestamp}_{safe_filename}"
-        s3_key = f"products/{unique_filename}"  # Store in products folder
+        s3_key = f"products/{unique_filename}"
         
         content_type = file.content_type
         if not content_type or content_type == 'application/octet-stream':
@@ -731,7 +644,7 @@ def upload_to_b2():
         
         logger.info(f"Uploading to B2: {s3_key} ({content_type})")
         
-        # Read the file data for verification
+        # Read the file data
         file.seek(0)
         file_data = file.read()
         file_size = len(file_data)
@@ -741,7 +654,7 @@ def upload_to_b2():
             logger.error("File is empty")
             return jsonify({'error': 'File is empty'}), 400
         
-        # Reset file pointer for upload
+        # Reset file pointer
         file.seek(0)
         
         # Upload to B2
@@ -765,7 +678,7 @@ def upload_to_b2():
             logger.error(f"Upload failed: {upload_error}")
             return jsonify({'error': f'Upload failed: {str(upload_error)}'}), 500
         
-        # Verify the upload was successful
+        # Verify the upload
         try:
             head_response = b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
             logger.info(f"✓ Verified image exists in B2: {s3_key}")
@@ -773,9 +686,8 @@ def upload_to_b2():
             logger.info(f"  Size: {head_response.get('ContentLength', 0)} bytes")
         except Exception as e:
             logger.error(f"Failed to verify image in B2: {e}")
-            # Continue anyway - the upload might have succeeded
         
-        # Generate proxy URL for immediate display
+        # Generate proxy URL
         proxy_url = f"/api/images/{s3_key}"
         
         # Store image record
@@ -795,7 +707,6 @@ def upload_to_b2():
             data_store.save_b2_images()
             logger.info(f"✓ Saved image record to B2 data store")
         
-        # Return both url and image field for compatibility
         return jsonify({
             'success': True,
             'url': proxy_url,
@@ -832,7 +743,6 @@ def get_products():
             # Use proxy URL for images
             if product.get('s3_key'):
                 s3_key = product['s3_key']
-                # Clean the s3_key
                 if s3_key.startswith('/'):
                     s3_key = s3_key[1:]
                 
@@ -899,7 +809,7 @@ def create_product():
             if '/api/images/' in image_url:
                 s3_key = image_url.replace('/api/images/', '')
             elif 'backblazeb2.com' in image_url:
-                # Extract from full B2 URL
+                # Extract from B2 URL
                 parsed = urlparse(image_url)
                 path = parsed.path
                 if '/file/' + B2_CONFIG['BUCKET_NAME'] + '/' in path:
@@ -938,7 +848,6 @@ def create_product():
         
         if s3_key:
             product['s3_key'] = s3_key
-            # Use proxy URL for display
             product['image'] = f"/api/images/{s3_key}"
             product['image_source'] = 'b2'
         else:
@@ -1059,7 +968,6 @@ def update_product(product_id):
             if s3_key:
                 s3_key = s3_key.lstrip('/')
                 product['s3_key'] = s3_key
-                # Use proxy URL
                 product['image'] = f"/api/images/{s3_key}"
                 product['image_source'] = 'b2'
         
@@ -1531,52 +1439,6 @@ def debug_b2_files():
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
-@app.route('/api/debug/test-image/<path:s3_key>', methods=['GET'])
-@jwt_required()
-def debug_test_image(s3_key):
-    """Test if an image exists in B2"""
-    if not b2_client:
-        return jsonify({'error': 'B2 not connected'}), 500
-    
-    try:
-        # Clean the key
-        if s3_key.startswith('/'):
-            s3_key = s3_key[1:]
-        
-        # Try to get object metadata
-        response = b2_client.head_object(
-            Bucket=B2_CONFIG['BUCKET_NAME'],
-            Key=s3_key
-        )
-        
-        return jsonify({
-            'success': True,
-            'key': s3_key,
-            'exists': True,
-            'metadata': {
-                'content_length': response.get('ContentLength'),
-                'content_type': response.get('ContentType'),
-                'etag': response.get('ETag'),
-                'last_modified': response.get('LastModified').isoformat() if response.get('LastModified') else None
-            }
-        }), 200
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'NoSuchKey':
-            return jsonify({
-                'success': False,
-                'key': s3_key,
-                'exists': False,
-                'error': 'File not found in B2'
-            }), 404
-        else:
-            return jsonify({
-                'success': False,
-                'key': s3_key,
-                'error': str(e)
-            }), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 # ==================== HEALTH CHECK ====================
 
 @app.route('/api/health', methods=['GET'])
@@ -1592,8 +1454,7 @@ def health_check():
         'products': len(data_store.products) if data_store else 0,
         'sales': len(data_store.sales) if data_store else 0,
         'images': len(data_store.b2_images) if data_store else 0,
-        'storage_type': 'b2' if B2_AVAILABLE else 'local',
-        'cross_device_sync': 'enabled' if B2_AVAILABLE else 'disabled'
+        'storage_type': 'b2' if B2_AVAILABLE else 'local'
     }), 200
 
 # ==================== STATIC FILE SERVING ====================
