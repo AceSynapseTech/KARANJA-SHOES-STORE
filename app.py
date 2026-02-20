@@ -44,19 +44,20 @@ CONSTANT_USER_ROLE = "admin"
 # ==================== BACKBLAZE B2 CONFIGURATION ====================
 B2_CONFIG = {
     # BUCKET INFORMATION
-    'BUCKET_NAME': os.environ.get('B2_BUCKET_NAME', 'karanjashoesstore'),
-    'BUCKET_ID': os.environ.get('B2_BUCKET_ID', '9240b308551f401795cd0d15'),
+    'BUCKET_NAME': os.environ.get('B2_BUCKET_NAME', 'KARANJASH'),
+    'BUCKET_ID': os.environ.get('B2_BUCKET_ID', '325093e8d52f70a795cd0d15'),
     'ENDPOINT': os.environ.get('B2_ENDPOINT', 's3.eu-central-003.backblazeb2.com'),
     'REGION': os.environ.get('B2_REGION', 'eu-central-003'),
-    'CDN_URL': os.environ.get('B2_CDN_URL', 'https://f005.backblazeb2.com/file/karanjashoesstore'),
-    'CREATED_DATE': 'February 9, 2026',
+    'CDN_URL': os.environ.get('B2_CDN_URL', 'https://f005.backblazeb2.com/file/KARANJASH'),
+    'CREATED_DATE': 'February 20, 2026',
     
-    # MASTER APPLICATION KEY
-    'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', '20385f075dd5'),
-    'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', '00320385f075dd50000000001'),
+    # APPLICATION KEY (KARANJASH)
+    'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', '00320385f075dd50000000002'),
+    'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', 'K0034O1CRh5jaFZRSwDBEf5e40lGJhY'),
     
     # BUCKET STATUS
     'TYPE': 'Private',
+    'ENCRYPTION': 'Enabled',
     
     # DATA STORAGE PATHS IN B2
     'DATA_PATHS': {
@@ -87,6 +88,11 @@ try:
     )
     logger.info("✓ Backblaze B2 client initialized successfully")
     B2_AVAILABLE = True
+    
+    # Test the connection by listing buckets
+    b2_client.list_buckets()
+    logger.info(f"✓ Successfully connected to B2 bucket: {B2_CONFIG['BUCKET_NAME']}")
+    
 except Exception as e:
     logger.error(f"✗ Failed to initialize B2 client: {e}")
     B2_AVAILABLE = False
@@ -382,7 +388,8 @@ def get_public_b2_info():
             'cdn_url': B2_CONFIG['CDN_URL'],
             'stored_images': len(data_store.b2_images),
             'connected': True,
-            'storage_type': 'b2'
+            'storage_type': 'b2',
+            'encryption': B2_CONFIG['ENCRYPTION']
         }), 200
     except Exception as e:
         logger.error(f"Error getting B2 info: {e}")
@@ -1074,6 +1081,7 @@ def get_b2_info():
             'created': B2_CONFIG['CREATED_DATE'],
             'cdn_url': B2_CONFIG['CDN_URL'],
             'type': B2_CONFIG['TYPE'],
+            'encryption': B2_CONFIG['ENCRYPTION'],
             'stored_images': len(data_store.b2_images),
             'connected': True,
             'storage_type': 'b2'
@@ -1227,6 +1235,8 @@ if __name__ == '__main__':
     logger.info(f"  Bucket Name: {B2_CONFIG['BUCKET_NAME']}")
     logger.info(f"  Bucket ID: {B2_CONFIG['BUCKET_ID']}")
     logger.info(f"  Created: {B2_CONFIG['CREATED_DATE']}")
+    logger.info(f"  Encryption: {B2_CONFIG['ENCRYPTION']}")
+    logger.info(f"  Access Key ID: {B2_CONFIG['ACCESS_KEY_ID']}")
     logger.info(f"  Products: {len(data_store.products)}")
     logger.info(f"  Sales: {len(data_store.sales)}")
     logger.info(f"  Images: {len(data_store.b2_images)}")
