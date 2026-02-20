@@ -125,39 +125,61 @@ except Exception as e:
     B2_AVAILABLE = False
     b2_client = None
 
-# ==================== ENSURE FOLDERS EXIST ====================
-def ensure_folders():
+# ==================== ENSURE FOLDERS EXIST IN B2 ====================
+def ensure_b2_folders():
     """Ensure required folders exist in B2 bucket"""
-    if not b2_client:
+    if not b2_client or not B2_AVAILABLE:
+        logger.warning("B2 not available, cannot create folders")
         return False
     
     folders = ['data', 'products']
-    created = []
+    created_folders = []
+    existing_folders = []
+    
+    logger.info("=" * 50)
+    logger.info("CHECKING B2 FOLDERS")
+    logger.info("=" * 50)
     
     for folder in folders:
         try:
+            # Check if folder exists by looking for .keep file
             test_key = f"{folder}/.keep"
             try:
                 b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=test_key)
-                logger.info(f"✓ {folder} folder already exists")
-            except ClientError:
-                # Create the folder by uploading a dummy file
-                b2_client.put_object(
-                    Bucket=B2_CONFIG['BUCKET_NAME'],
-                    Key=test_key,
-                    Body=b'',
-                    ContentType='text/plain'
-                )
-                logger.info(f"✓ Created {folder} folder in B2")
-                created.append(folder)
+                logger.info(f"✓ Folder already exists: {folder}/")
+                existing_folders.append(folder)
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchKey':
+                    # Folder doesn't exist, create it
+                    logger.info(f"Creating folder: {folder}/")
+                    b2_client.put_object(
+                        Bucket=B2_CONFIG['BUCKET_NAME'],
+                        Key=test_key,
+                        Body=b'',
+                        ContentType='text/plain'
+                    )
+                    logger.info(f"✓ Successfully created folder: {folder}/")
+                    created_folders.append(folder)
+                else:
+                    logger.error(f"Error checking folder {folder}: {e}")
         except Exception as e:
-            logger.error(f"Error ensuring {folder} folder: {e}")
+            logger.error(f"Error ensuring folder {folder}: {e}")
     
-    return created
+    logger.info("=" * 50)
+    if created_folders:
+        logger.info(f"✅ Created folders: {', '.join(created_folders)}")
+    if existing_folders:
+        logger.info(f"✅ Existing folders: {', '.join(existing_folders)}")
+    logger.info("=" * 50)
+    
+    return True
 
-# Call this after initializing B2
+# ==================== INITIALIZE B2 FOLDERS ====================
+# Call this function to create folders when app starts
 if B2_AVAILABLE and b2_client:
-    ensure_folders()
+    ensure_b2_folders()
+else:
+    logger.warning("⚠ B2 not available - folders will not be created")
 
 # ==================== EXTENSIONS ====================
 CORS(app, resources={
@@ -1375,6 +1397,17 @@ def test_upload():
         return jsonify({'error': 'B2 not connected'}), 500
     
     try:
+        # Ensure products folder exists
+        try:
+            b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key='products/.keep')
+        except ClientError:
+            b2_client.put_object(
+                Bucket=B2_CONFIG['BUCKET_NAME'],
+                Key='products/.keep',
+                Body=b'',
+                ContentType='text/plain'
+            )
+        
         # Try to upload a small test file
         test_key = f"products/test-file-{int(datetime.now().timestamp())}.txt"
         test_content = b"Test upload from Karanja Shoe Store - " + str(datetime.now()).encode()
