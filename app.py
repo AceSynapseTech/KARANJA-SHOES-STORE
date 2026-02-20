@@ -633,16 +633,22 @@ def logout():
 def upload_to_b2():
     """Upload image to Backblaze B2 Private Bucket"""
     if not b2_client:
+        logger.error("B2 client not available")
         return jsonify({'error': 'Backblaze B2 is not configured'}), 503
     
     try:
         if 'image' not in request.files:
+            logger.error("No image file in request")
             return jsonify({'error': 'No image file provided'}), 400
         
         file = request.files['image']
         
         if file.filename == '':
+            logger.error("Empty filename")
             return jsonify({'error': 'No image selected'}), 400
+        
+        # Log file details
+        logger.info(f"Received file: {file.filename}, Content-Type: {file.content_type}")
         
         # Generate unique filename
         timestamp = int(datetime.now().timestamp())
@@ -651,7 +657,7 @@ def upload_to_b2():
         s3_key = f"products/{unique_filename}"  # Store in products folder
         
         content_type = file.content_type
-        if not content_type:
+        if not content_type or content_type == 'application/octet-stream':
             content_type = mimetypes.guess_type(file.filename)[0] or 'image/jpeg'
         
         logger.info(f"Uploading to B2: {s3_key} ({content_type})")
@@ -662,26 +668,33 @@ def upload_to_b2():
         file_size = len(file_data)
         logger.info(f"File size: {file_size} bytes")
         
+        if file_size == 0:
+            logger.error("File is empty")
+            return jsonify({'error': 'File is empty'}), 400
+        
         # Reset file pointer for upload
         file.seek(0)
         
         # Upload to B2
-        b2_client.upload_fileobj(
-            file,
-            B2_CONFIG['BUCKET_NAME'],
-            s3_key,
-            ExtraArgs={
-                'ContentType': content_type,
-                'CacheControl': 'max-age=31536000',
-                'Metadata': {
-                    'uploaded_by': get_jwt_identity(),
-                    'original_filename': file.filename,
-                    'uploaded_at': datetime.now().isoformat()
+        try:
+            b2_client.upload_fileobj(
+                file,
+                B2_CONFIG['BUCKET_NAME'],
+                s3_key,
+                ExtraArgs={
+                    'ContentType': content_type,
+                    'CacheControl': 'max-age=31536000',
+                    'Metadata': {
+                        'uploaded_by': get_jwt_identity(),
+                        'original_filename': file.filename,
+                        'uploaded_at': datetime.now().isoformat()
+                    }
                 }
-            }
-        )
-        
-        logger.info(f"✓ Successfully uploaded image to B2: {s3_key} ({file_size} bytes)")
+            )
+            logger.info(f"✓ Successfully uploaded image to B2: {s3_key}")
+        except Exception as upload_error:
+            logger.error(f"Upload failed: {upload_error}")
+            return jsonify({'error': f'Upload failed: {str(upload_error)}'}), 500
         
         # Verify the upload was successful
         try:
@@ -691,6 +704,7 @@ def upload_to_b2():
             logger.info(f"  Size: {head_response.get('ContentLength', 0)} bytes")
         except Exception as e:
             logger.error(f"Failed to verify image in B2: {e}")
+            # Continue anyway - the upload might have succeeded
         
         # Generate proxy URL for immediate display
         proxy_url = f"/api/images/{s3_key}"
@@ -1305,6 +1319,98 @@ def get_b2_info():
     }), 200
 
 # ==================== DEBUG ROUTES ====================
+
+@app.route('/api/debug/test-upload', methods=['POST'])
+@jwt_required()
+def test_upload():
+    """Test if we can upload to B2"""
+    if not b2_client:
+        return jsonify({'error': 'B2 not connected'}), 500
+    
+    try:
+        # Try to upload a small test file
+        test_key = f"test/test-file-{int(datetime.now().timestamp())}.txt"
+        test_content = b"Test upload from Karanja Shoe Store - " + str(datetime.now()).encode()
+        
+        b2_client.put_object(
+            Bucket=B2_CONFIG['BUCKET_NAME'],
+            Key=test_key,
+            Body=test_content,
+            ContentType='text/plain'
+        )
+        
+        # Verify it exists
+        head_response = b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=test_key)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Test upload successful',
+            'key': test_key,
+            'size': head_response.get('ContentLength')
+        }), 200
+    except Exception as e:
+        logger.error(f"Test upload failed: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/api/debug/list-bucket', methods=['GET'])
+@jwt_required()
+def list_bucket():
+    """List all files in the bucket"""
+    if not b2_client:
+        return jsonify({'error': 'B2 not connected'}), 500
+    
+    try:
+        # List all objects in bucket
+        all_files = []
+        continuation_token = None
+        
+        while True:
+            if continuation_token:
+                response = b2_client.list_objects_v2(
+                    Bucket=B2_CONFIG['BUCKET_NAME'],
+                    ContinuationToken=continuation_token,
+                    MaxKeys=1000
+                )
+            else:
+                response = b2_client.list_objects_v2(
+                    Bucket=B2_CONFIG['BUCKET_NAME'],
+                    MaxKeys=1000
+                )
+            
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    all_files.append({
+                        'key': obj['Key'],
+                        'size': obj['Size'],
+                        'last_modified': obj['LastModified'].isoformat() if obj.get('LastModified') else None
+                    })
+            
+            if response.get('IsTruncated'):
+                continuation_token = response.get('NextContinuationToken')
+            else:
+                break
+        
+        # Get unique folders
+        folders = set()
+        for f in all_files:
+            parts = f['key'].split('/')
+            if len(parts) > 1:
+                folders.add(parts[0])
+        
+        return jsonify({
+            'success': True,
+            'bucket': B2_CONFIG['BUCKET_NAME'],
+            'files': all_files,
+            'total_files': len(all_files),
+            'folders': list(folders)
+        }), 200
+    except Exception as e:
+        logger.error(f"Error listing bucket: {e}")
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 @app.route('/api/debug/b2-files', methods=['GET'])
 @jwt_required()
