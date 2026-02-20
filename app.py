@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, send_from_directory, make_response
+from flask import Flask, request, jsonify, send_file, send_from_directory, make_response, abort
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, verify_jwt_in_request
 from datetime import datetime, timedelta
@@ -15,6 +15,8 @@ import logging
 import traceback
 from functools import wraps
 from urllib.parse import urlparse
+import requests
+from io import BytesIO
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,14 +40,21 @@ os.makedirs('static', exist_ok=True)
 placeholder_path = os.path.join('static', 'placeholder.png')
 if not os.path.exists(placeholder_path):
     try:
-        from PIL import Image, ImageDraw
-        img = Image.new('RGB', (300, 300), color=(102, 126, 234))
-        draw = ImageDraw.Draw(img)
-        draw.text((150, 150), "No Image", fill="white", anchor="mm")
-        img.save(placeholder_path)
-        logger.info("✓ Created placeholder image")
-    except:
-        logger.warning("Could not create placeholder image")
+        # Try to create a simple placeholder with PIL if available
+        try:
+            from PIL import Image, ImageDraw
+            img = Image.new('RGB', (300, 300), color=(102, 126, 234))
+            draw = ImageDraw.Draw(img)
+            draw.text((150, 150), "No Image", fill="white", anchor="mm")
+            img.save(placeholder_path)
+            logger.info("✓ Created placeholder image")
+        except:
+            # If PIL not available, create a simple text file and rename
+            with open(placeholder_path, 'wb') as f:
+                f.write(b'')
+            logger.warning("Created empty placeholder file")
+    except Exception as e:
+        logger.warning(f"Could not create placeholder image: {e}")
 
 # ==================== CONSTANT LOGIN CREDENTIALS ====================
 CONSTANT_EMAIL = "KARANJASHOESTORE@GMAIL.COM"
@@ -100,8 +109,8 @@ try:
     B2_AVAILABLE = True
     
     # Test the connection
-    b2_client.list_buckets()
-    logger.info(f"✓ Successfully connected to B2 bucket: {B2_CONFIG['BUCKET_NAME']}")
+    buckets = b2_client.list_buckets()
+    logger.info(f"✓ Successfully connected to B2. Available buckets: {[b['Name'] for b in buckets['Buckets']]}")
     
 except Exception as e:
     logger.error(f"✗ Failed to initialize B2 client: {e}")
@@ -386,6 +395,8 @@ def extract_s3_key_from_url(url):
                 key = key.split('?')[0]
             
             return key
+        elif '/api/images/' in url:
+            return url.replace('/api/images/', '')
         
         return url
     except Exception as e:
@@ -409,7 +420,10 @@ def verify_image_exists(s3_key):
 def proxy_image(s3_key):
     """Proxy images from private B2 bucket with authentication"""
     if not b2_client:
+        logger.warning("B2 client not available, serving placeholder")
         return send_file('static/placeholder.png')
+    
+    logger.info(f"Attempting to serve image: {s3_key}")
     
     try:
         # Try to get the object from B2
@@ -426,18 +440,27 @@ def proxy_image(s3_key):
         resp = make_response(image_data)
         resp.headers['Content-Type'] = content_type
         resp.headers['Cache-Control'] = 'public, max-age=31536000'
+        resp.headers['Access-Control-Allow-Origin'] = '*'
         
-        logger.info(f"✓ Served image via proxy: {s3_key}")
+        logger.info(f"✓ Successfully served image via proxy: {s3_key}")
         return resp
         
     except ClientError as e:
-        if e.response['Error']['Code'] == 'NoSuchKey':
+        error_code = e.response['Error']['Code']
+        logger.error(f"B2 ClientError for {s3_key}: {error_code}")
+        
+        if error_code == 'NoSuchKey':
             logger.warning(f"Image not found in B2: {s3_key}")
             return send_file('static/placeholder.png')
-        logger.error(f"Error accessing image in B2: {e}")
-        return send_file('static/placeholder.png')
+        elif error_code == 'AccessDenied':
+            logger.error(f"Access denied to B2 bucket for key: {s3_key}")
+            return send_file('static/placeholder.png')
+        else:
+            logger.error(f"Error accessing image in B2: {e}")
+            return send_file('static/placeholder.png')
+            
     except Exception as e:
-        logger.error(f"Error proxying image: {e}")
+        logger.error(f"Unexpected error proxying image {s3_key}: {e}")
         return send_file('static/placeholder.png')
 
 # ==================== PUBLIC ENDPOINTS ====================
@@ -630,6 +653,13 @@ def upload_to_b2():
             data_store.b2_images.append(image_record)
             data_store.save_b2_images()
         
+        # Verify the upload was successful
+        try:
+            b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
+            logger.info(f"✓ Verified image exists in B2: {s3_key}")
+        except Exception as e:
+            logger.error(f"Failed to verify image in B2: {e}")
+        
         # Return both url and image field for compatibility
         return jsonify({
             'success': True,
@@ -642,6 +672,7 @@ def upload_to_b2():
         
     except Exception as e:
         logger.error(f"Error uploading to B2: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 # ==================== PRODUCT ROUTES ====================
