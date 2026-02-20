@@ -64,6 +64,7 @@ CONSTANT_USER_NAME = "Karanja Shoe Store"
 CONSTANT_USER_ROLE = "admin"
 
 # ==================== BACKBLAZE B2 CONFIGURATION ====================
+# UPDATED WITH NEW CREDENTIALS
 B2_CONFIG = {
     'BUCKET_NAME': os.environ.get('B2_BUCKET_NAME', 'KARANJASH'),
     'BUCKET_ID': os.environ.get('B2_BUCKET_ID', '325093e8d52f70a795cd0d15'),
@@ -72,9 +73,9 @@ B2_CONFIG = {
     'CDN_URL': os.environ.get('B2_CDN_URL', 'https://f005.backblazeb2.com/file/KARANJASH'),
     'CREATED_DATE': 'February 20, 2026',
     
-    # APPLICATION KEY (KARANJASH)
-    'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', '00320385f075dd50000000002'),
-    'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', 'K0034O1CRh5jaFZRSwDBEf5e40lGJhY'),
+    # NEW APPLICATION KEY (Master Application Key)
+    'ACCESS_KEY_ID': os.environ.get('B2_ACCESS_KEY_ID', '20385f075dd5'),
+    'SECRET_ACCESS_KEY': os.environ.get('B2_SECRET_ACCESS_KEY', 'K003o93ThMSDy+JmCz0kQQE8MLmtSHY'),
     
     'TYPE': 'Private',
     'ENCRYPTION': 'Enabled',
@@ -93,6 +94,10 @@ B2_CONFIG = {
 }
 
 # Initialize Backblaze B2 client
+B2_AVAILABLE = False
+b2_client = None
+data_store = None
+
 try:
     b2_client = boto3.client(
         's3',
@@ -431,7 +436,7 @@ def verify_image_exists(s3_key):
 
 # ==================== IMAGE PROXY ROUTE ====================
 
-@app.route('/api/images/<path:s3_key>')
+@app.route('/images/<path:s3_key>')
 @optional_jwt_required()
 def proxy_image(s3_key):
     """Proxy images from private B2 bucket with authentication"""
@@ -479,6 +484,104 @@ def proxy_image(s3_key):
         logger.error(f"Unexpected error proxying image {s3_key}: {e}")
         return send_file('static/placeholder.png')
 
+# ==================== UPLOAD ENDPOINT ====================
+
+@app.route('/api/upload', methods=['POST'])
+@jwt_required()
+def upload_image():
+    """Upload image to Backblaze B2"""
+    if not b2_client:
+        return jsonify({'error': 'Backblaze B2 is not configured'}), 503
+    
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+        
+        file = request.files['image']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No image selected'}), 400
+        
+        # Generate unique filename
+        timestamp = int(datetime.now().timestamp())
+        safe_filename = secure_filename(file.filename)
+        unique_filename = f"{timestamp}_{safe_filename}"
+        s3_key = f"products/{unique_filename}"
+        
+        content_type = file.content_type
+        if not content_type:
+            content_type = mimetypes.guess_type(file.filename)[0] or 'image/jpeg'
+        
+        logger.info(f"Uploading to B2: {s3_key} ({content_type})")
+        
+        # Upload to B2
+        file.seek(0)
+        
+        # Read the file data for verification
+        file_data = file.read()
+        file_size = len(file_data)
+        
+        # Reset file pointer for upload
+        file.seek(0)
+        
+        # Upload to B2
+        b2_client.upload_fileobj(
+            file,
+            B2_CONFIG['BUCKET_NAME'],
+            s3_key,
+            ExtraArgs={
+                'ContentType': content_type,
+                'CacheControl': 'max-age=31536000',
+                'Metadata': {
+                    'uploaded_by': get_jwt_identity(),
+                    'original_filename': file.filename,
+                    'uploaded_at': datetime.now().isoformat()
+                }
+            }
+        )
+        
+        logger.info(f"✓ Successfully uploaded image to B2: {s3_key} ({file_size} bytes)")
+        
+        # Verify the upload was successful
+        try:
+            b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
+            logger.info(f"✓ Verified image exists in B2: {s3_key}")
+        except Exception as e:
+            logger.error(f"Failed to verify image in B2: {e}")
+        
+        # Generate proxy URL for display
+        proxy_url = f"/images/{s3_key}"
+        
+        # Store image record
+        if data_store:
+            image_record = {
+                'id': str(uuid.uuid4()),
+                's3_key': s3_key,
+                'proxy_url': proxy_url,
+                'fileName': unique_filename,
+                'bucketId': B2_CONFIG['BUCKET_ID'],
+                'bucketName': B2_CONFIG['BUCKET_NAME'],
+                'uploadedAt': datetime.now().isoformat(),
+                'fileSize': file_size,
+                'contentType': content_type
+            }
+            data_store.b2_images.append(image_record)
+            data_store.save_b2_images()
+            logger.info(f"✓ Saved image record to B2 data store")
+        
+        # Return the URL that can be used in the product form
+        return jsonify({
+            'success': True,
+            'url': proxy_url,
+            's3_key': s3_key,
+            'filename': unique_filename
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error uploading to B2: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 # ==================== PUBLIC ENDPOINTS ====================
 
 @app.route('/api/public/products', methods=['GET'])
@@ -500,17 +603,12 @@ def get_public_products():
             # Remove sensitive data
             product_copy.pop('buyPrice', None)
             product_copy.pop('createdBy', None)
-            product_copy.pop('minSellPrice', None)
-            product_copy.pop('maxSellPrice', None)
             
             # Use proxy URL for images
             if product.get('s3_key'):
-                # Verify image exists
-                if verify_image_exists(product['s3_key']):
-                    product_copy['image'] = f"/api/images/{product['s3_key']}"
-                    product_copy['imageUrl'] = f"/api/images/{product['s3_key']}"
-                else:
-                    product_copy['image'] = '/static/placeholder.png'
+                # Check if image exists (don't verify on every request to avoid rate limiting)
+                product_copy['image'] = f"/images/{product['s3_key']}"
+                product_copy['imageUrl'] = f"/images/{product['s3_key']}"
             else:
                 product_copy['image'] = '/static/placeholder.png'
             
@@ -609,106 +707,6 @@ def logout():
     """Logout user"""
     return jsonify({'success': True, 'message': 'Logged out successfully'}), 200
 
-# ==================== BACKBLAZE B2 UPLOAD ROUTE ====================
-
-@app.route('/api/b2/upload', methods=['POST'])
-@jwt_required()
-def upload_to_b2():
-    """Upload image to Backblaze B2 Private Bucket"""
-    if not b2_client:
-        return jsonify({'error': 'Backblaze B2 is not configured'}), 503
-    
-    try:
-        if 'image' not in request.files:
-            return jsonify({'error': 'No image file provided'}), 400
-        
-        file = request.files['image']
-        
-        if file.filename == '':
-            return jsonify({'error': 'No image selected'}), 400
-        
-        # Generate unique filename
-        timestamp = int(datetime.now().timestamp())
-        safe_filename = secure_filename(file.filename)
-        unique_filename = f"{timestamp}_{safe_filename}"
-        s3_key = f"products/{unique_filename}"
-        
-        content_type = file.content_type
-        if not content_type:
-            content_type = mimetypes.guess_type(file.filename)[0] or 'image/jpeg'
-        
-        logger.info(f"Uploading to B2: {s3_key} ({content_type})")
-        
-        # Upload to B2
-        file.seek(0)
-        
-        # Read the file data for verification
-        file_data = file.read()
-        file_size = len(file_data)
-        
-        # Reset file pointer for upload
-        file.seek(0)
-        
-        # Upload to B2
-        b2_client.upload_fileobj(
-            file,
-            B2_CONFIG['BUCKET_NAME'],
-            s3_key,
-            ExtraArgs={
-                'ContentType': content_type,
-                'CacheControl': 'max-age=31536000',
-                'Metadata': {
-                    'uploaded_by': get_jwt_identity(),
-                    'original_filename': file.filename,
-                    'uploaded_at': datetime.now().isoformat()
-                }
-            }
-        )
-        
-        logger.info(f"✓ Successfully uploaded image to B2: {s3_key} ({file_size} bytes)")
-        
-        # Verify the upload was successful
-        try:
-            b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
-            logger.info(f"✓ Verified image exists in B2: {s3_key}")
-        except Exception as e:
-            logger.error(f"Failed to verify image in B2: {e}")
-        
-        # Generate proxy URL for immediate display
-        proxy_url = f"/api/images/{s3_key}"
-        
-        # Store image record
-        if data_store:
-            image_record = {
-                'id': str(uuid.uuid4()),
-                's3_key': s3_key,
-                'proxy_url': proxy_url,
-                'fileName': unique_filename,
-                'bucketId': B2_CONFIG['BUCKET_ID'],
-                'bucketName': B2_CONFIG['BUCKET_NAME'],
-                'uploadedAt': datetime.now().isoformat(),
-                'fileSize': file_size,
-                'contentType': content_type
-            }
-            data_store.b2_images.append(image_record)
-            data_store.save_b2_images()
-            logger.info(f"✓ Saved image record to B2 data store")
-        
-        # Return both url and image field for compatibility
-        return jsonify({
-            'success': True,
-            'url': proxy_url,  # This is what the frontend expects
-            'proxy_url': proxy_url,
-            'fileName': unique_filename,
-            's3_key': s3_key,
-            'image': proxy_url  # Also include image field for compatibility
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Error uploading to B2: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
 # ==================== PRODUCT ROUTES ====================
 
 @app.route('/api/products', methods=['GET'])
@@ -730,12 +728,8 @@ def get_products():
             
             # Use proxy URL for images
             if product.get('s3_key'):
-                # Verify image exists
-                if verify_image_exists(product['s3_key']):
-                    product_copy['image'] = f"/api/images/{product['s3_key']}"
-                    product_copy['imageUrl'] = f"/api/images/{product['s3_key']}"
-                else:
-                    product_copy['image'] = '/static/placeholder.png'
+                product_copy['image'] = f"/images/{product['s3_key']}"
+                product_copy['imageUrl'] = f"/images/{product['s3_key']}"
             else:
                 product_copy['image'] = '/static/placeholder.png'
             
@@ -794,8 +788,8 @@ def create_product():
         # Extract s3_key from image_url
         s3_key = None
         if image_url:
-            if '/api/images/' in image_url:
-                s3_key = image_url.replace('/api/images/', '')
+            if '/images/' in image_url:
+                s3_key = image_url.replace('/images/', '')
             elif 'backblazeb2.com' in image_url:
                 s3_key = extract_s3_key_from_url(image_url)
             elif not image_url.startswith('/static/'):
@@ -826,14 +820,10 @@ def create_product():
         if s3_key:
             product['s3_key'] = s3_key
             # Use proxy URL for display
-            product['image'] = f"/api/images/{s3_key}"
+            product['image'] = f"/images/{s3_key}"
             product['image_source'] = 'b2'
             
-            # Verify image exists
-            if verify_image_exists(s3_key):
-                logger.info(f"✓ Product {name} linked to existing image: {s3_key}")
-            else:
-                logger.warning(f"⚠ Image not found for product {name}: {s3_key}")
+            logger.info(f"✓ Product {name} linked to image: {s3_key}")
         else:
             product['image'] = '/static/placeholder.png'
             product['image_source'] = 'placeholder'
@@ -935,8 +925,8 @@ def update_product(product_id):
         
         if image_url:
             # Extract s3_key from image_url
-            if '/api/images/' in image_url:
-                s3_key = image_url.replace('/api/images/', '')
+            if '/images/' in image_url:
+                s3_key = image_url.replace('/images/', '')
             elif 'backblazeb2.com' in image_url:
                 s3_key = extract_s3_key_from_url(image_url)
             elif not image_url.startswith('/static/'):
@@ -947,11 +937,8 @@ def update_product(product_id):
             if s3_key:
                 product['s3_key'] = s3_key
                 # Use proxy URL
-                product['image'] = f"/api/images/{s3_key}"
+                product['image'] = f"/images/{s3_key}"
                 product['image_source'] = 'b2'
-                
-                # Verify image exists
-                verify_image_exists(s3_key)
         
         product['lastUpdated'] = datetime.now().isoformat()
         
@@ -1331,7 +1318,7 @@ def index():
 @app.route('/<path:path>')
 def catch_all(path):
     """Serve index.html for all non-API routes"""
-    if path.startswith('api/') or path.startswith('static/'):
+    if path.startswith('api/') or path.startswith('static/') or path.startswith('images/'):
         return jsonify({'error': 'Not found'}), 404
     
     try:
@@ -1377,25 +1364,31 @@ def request_entity_too_large(e):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     
-    logger.info("=" * 70)
-    logger.info("✓ KARANJA SHOE STORE - BACKBLAZE B2 INTEGRATION")
-    logger.info("=" * 70)
-    logger.info(f"  Bucket Name: {B2_CONFIG['BUCKET_NAME']}")
-    logger.info(f"  Bucket ID: {B2_CONFIG['BUCKET_ID']}")
-    logger.info(f"  Created: {B2_CONFIG['CREATED_DATE']}")
-    logger.info(f"  Encryption: {B2_CONFIG['ENCRYPTION']}")
-    logger.info(f"  Connection: {'✓ Connected' if B2_AVAILABLE else '✗ Failed'}")
+    print("\n" + "=" * 70)
+    print("🚀 KARANJA SHOE STORE - BACKBLAZE B2 INTEGRATION")
+    print("=" * 70)
+    print(f"\n📦 Backblaze B2 Status:")
+    print(f"   • Connected: {'✅ YES' if B2_AVAILABLE else '❌ NO'}")
+    print(f"   • Bucket: {B2_CONFIG['BUCKET_NAME']}")
+    print(f"   • Bucket ID: {B2_CONFIG['BUCKET_ID']}")
+    print(f"   • Endpoint: {B2_CONFIG['ENDPOINT']}")
+    print(f"   • Created: {B2_CONFIG['CREATED_DATE']}")
+    print(f"   • Encryption: {B2_CONFIG['ENCRYPTION']}")
+    
     if data_store:
-        logger.info(f"  Products: {len(data_store.products)}")
-        logger.info(f"  Sales: {len(data_store.sales)}")
-        logger.info(f"  Images: {len(data_store.b2_images)}")
-    logger.info("=" * 70)
-    logger.info("✓ CONSTANT LOGIN CREDENTIALS:")
-    logger.info(f"  Email: {CONSTANT_EMAIL}")
-    logger.info(f"  Password: {CONSTANT_PASSWORD}")
-    logger.info("=" * 70)
-    logger.info("✓ SERVER STARTED SUCCESSFULLY")
-    logger.info(f"  URL: http://0.0.0.0:{port}")
-    logger.info("=" * 70)
+        print(f"\n📊 Data Store:")
+        print(f"   • Products: {len(data_store.products)}")
+        print(f"   • Sales: {len(data_store.sales)}")
+        print(f"   • Images: {len(data_store.b2_images)}")
+        print(f"   • Notifications: {len(data_store.notifications)}")
+    
+    print(f"\n🔐 Login Credentials:")
+    print(f"   • Email: {CONSTANT_EMAIL}")
+    print(f"   • Password: {CONSTANT_PASSWORD}")
+    
+    print(f"\n🌐 Server:")
+    print(f"   • URL: http://0.0.0.0:{port}")
+    print(f"   • Image URL Pattern: http://0.0.0.0:{port}/images/<s3_key>")
+    print("=" * 70 + "\n")
     
     app.run(host='0.0.0.0', port=port, debug=True)
