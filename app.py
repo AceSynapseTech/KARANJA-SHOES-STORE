@@ -153,49 +153,76 @@ def optional_jwt_required():
 def get_table_data(table_name):
     """Get all data from a Supabase table"""
     if not supabase:
-        logger.error(f"Supabase not available for {table_name}")
+        logger.error(f"✗ Supabase not available for {table_name}")
         return []
     try:
+        logger.info(f"Fetching data from {table_name}...")
         response = supabase.table(table_name).select("*").execute()
         logger.info(f"✓ Retrieved {len(response.data)} records from {table_name}")
         return response.data
     except Exception as e:
-        logger.error(f"Error reading from {table_name}: {e}")
+        logger.error(f"✗ Error reading from {table_name}: {e}")
+        logger.error(traceback.format_exc())
         return []
 
 def save_table_data(table_name, data):
-    """Save data to Supabase table (upsert)"""
+    """Save data to Supabase table with detailed error reporting"""
     if not supabase:
-        logger.error(f"Supabase not available for saving to {table_name}")
+        logger.error(f"✗ Supabase not available for saving to {table_name}")
         return False
+    
     try:
+        logger.info(f"Attempting to save to {table_name}")
+        logger.info(f"Data type: {type(data)}")
+        logger.info(f"Data preview: {json.dumps(data, default=str)[:500]}")
+        
         if isinstance(data, list):
-            # For list of records
-            for record in data:
-                result = supabase.table(table_name).upsert(record).execute()
-                logger.info(f"✓ Upserted record to {table_name}: {record.get('id', 'unknown')}")
-        else:
-            # For single record
+            logger.info(f"Saving list of {len(data)} records")
             result = supabase.table(table_name).upsert(data).execute()
-            logger.info(f"✓ Upserted single record to {table_name}: {data.get('id', 'unknown')}")
+            logger.info(f"✓ Successfully saved {len(data)} records to {table_name}")
+        else:
+            logger.info(f"Saving single record with ID: {data.get('id', 'unknown')}")
+            result = supabase.table(table_name).upsert(data).execute()
+            logger.info(f"✓ Successfully saved single record to {table_name}")
+        
+        # Log the result for debugging
+        if hasattr(result, 'data'):
+            logger.info(f"Result data count: {len(result.data) if result.data else 0}")
+            if result.data and len(result.data) > 0:
+                logger.info(f"First result: {json.dumps(result.data[0], default=str)[:200]}")
         
         return True
+        
     except Exception as e:
-        logger.error(f"✗ Error saving to {table_name}: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"✗ Error saving to {table_name}: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {traceback.format_exc()}")
+        
+        # Try to get more specific error info from Supabase
+        if hasattr(e, 'message'):
+            logger.error(f"Error message: {e.message}")
+        if hasattr(e, 'details'):
+            logger.error(f"Error details: {e.details}")
+        if hasattr(e, 'hint'):
+            logger.error(f"Error hint: {e.hint}")
+        if hasattr(e, 'code'):
+            logger.error(f"Error code: {e.code}")
+            
         return False
 
 def delete_table_data(table_name, record_id):
     """Delete data from Supabase table"""
     if not supabase:
-        logger.error(f"Supabase not available for deleting from {table_name}")
+        logger.error(f"✗ Supabase not available for deleting from {table_name}")
         return False
     try:
+        logger.info(f"Deleting from {table_name} where id = {record_id}")
         result = supabase.table(table_name).delete().eq("id", record_id).execute()
         logger.info(f"✓ Successfully deleted from {table_name}: {record_id}")
         return True
     except Exception as e:
         logger.error(f"✗ Error deleting from {table_name}: {e}")
+        logger.error(traceback.format_exc())
         return False
 
 # ==================== SUPABASE STORAGE FOR IMAGES ====================
@@ -486,9 +513,17 @@ def get_products():
 @app.route('/api/products', methods=['POST'])
 @jwt_required()
 def create_product():
-    """Create new product"""
+    """Create new product with detailed error handling"""
     try:
+        # Log all form data for debugging
+        logger.info(f"Form data keys: {list(request.form.keys())}")
+        logger.info(f"Files: {list(request.files.keys()) if request.files else 'No files'}")
+        
         name = request.form.get('name')
+        if not name:
+            return jsonify({'error': 'Product name is required'}), 400
+        
+        # Get other fields
         price = request.form.get('price')
         description = request.form.get('description', '')
         category = request.form.get('category', 'Uncategorized')
@@ -498,17 +533,17 @@ def create_product():
         sizes_json = request.form.get('sizes', '{}')
         try:
             sizes = json.loads(sizes_json)
-        except:
+            logger.info(f"Sizes parsed: {sizes}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing sizes JSON: {e}")
             sizes = {}
         
         buy_price = request.form.get('buyPrice')
         min_sell_price = request.form.get('minSellPrice')
         max_sell_price = request.form.get('maxSellPrice')
-        image_path = request.form.get('image_path')  # Path from upload
+        image_path = request.form.get('image_path')
         
-        if not name:
-            return jsonify({'error': 'Product name is required'}), 400
-        
+        # Validate prices
         if not max_sell_price and price:
             max_sell_price = price
         if not min_sell_price and price:
@@ -517,11 +552,12 @@ def create_product():
         if not max_sell_price:
             return jsonify({'error': 'Price is required'}), 400
         
+        # Calculate total stock
         total_stock = 0
         for size, stock in sizes.items():
             try:
                 total_stock += int(stock) if stock and int(stock) > 0 else 0
-            except:
+            except (ValueError, TypeError):
                 pass
         
         product_id = int(datetime.now().timestamp() * 1000)
@@ -548,12 +584,21 @@ def create_product():
         if image_path:
             product['image_path'] = image_path
         
-        # Save to Supabase
-        logger.info(f"Attempting to save product: {product}")
+        # Log the product data
+        logger.info(f"Product data to save: {json.dumps(product, default=str)}")
+        
+        # Check Supabase connection
+        if not supabase:
+            logger.error("Supabase client is None")
+            return jsonify({'error': 'Supabase not connected'}), 500
+        
+        # Try to save
+        logger.info("Attempting to save to Supabase...")
         success = save_table_data('products', product)
         
         if not success:
-            return jsonify({'error': 'Failed to save to Supabase'}), 500
+            logger.error("save_table_data returned False")
+            return jsonify({'error': 'Failed to save to Supabase - check logs for details'}), 500
         
         # Add image URL for response
         if image_path:
@@ -926,6 +971,66 @@ def debug_check_db():
             'error': str(e),
             'table_exists': False,
             'supabase_connected': SUPABASE_AVAILABLE
+        }), 500
+
+@app.route('/api/debug/test-supabase', methods=['GET'])
+@jwt_required()
+def test_supabase():
+    """Test Supabase connection and permissions"""
+    results = {}
+    
+    # Test 1: Check if supabase client exists
+    results['client_exists'] = supabase is not None
+    
+    if not supabase:
+        return jsonify({'error': 'Supabase client not initialized', 'results': results}), 500
+    
+    try:
+        # Test 2: Try to list tables
+        try:
+            tables = supabase.table('products').select('*').limit(1).execute()
+            results['can_query_products'] = True
+            results['products_table_exists'] = True
+        except Exception as e:
+            results['can_query_products'] = False
+            results['products_table_error'] = str(e)
+        
+        # Test 3: Try to insert a test record
+        try:
+            test_id = int(datetime.now().timestamp())
+            test_data = {
+                'id': test_id,
+                'name': 'test_product',
+                'description': 'test'
+            }
+            result = supabase.table('products').insert(test_data).execute()
+            results['can_insert'] = True
+            
+            # Clean up test record
+            supabase.table('products').delete().eq('id', test_id).execute()
+        except Exception as e:
+            results['can_insert'] = False
+            results['insert_error'] = str(e)
+        
+        # Test 4: Storage access
+        try:
+            buckets = supabase.storage.list_buckets()
+            results['can_list_buckets'] = True
+            results['buckets'] = [b['name'] for b in buckets]
+        except Exception as e:
+            results['can_list_buckets'] = False
+            results['storage_error'] = str(e)
+        
+        return jsonify({
+            'success': True,
+            'supabase_available': SUPABASE_AVAILABLE,
+            'tests': results
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
         }), 500
 
 # ==================== HEALTH CHECK ====================
