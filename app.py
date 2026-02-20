@@ -106,12 +106,20 @@ try:
         )
     )
     logger.info("✓ Backblaze B2 client initialized successfully")
-    B2_AVAILABLE = True
     
-    # Test the connection
+    # Test the connection by listing buckets
     buckets = b2_client.list_buckets()
     logger.info(f"✓ Successfully connected to B2. Available buckets: {[b['Name'] for b in buckets['Buckets']]}")
     
+    # Test if we can access the specific bucket
+    try:
+        b2_client.head_bucket(Bucket=B2_CONFIG['BUCKET_NAME'])
+        logger.info(f"✓ Successfully accessed bucket: {B2_CONFIG['BUCKET_NAME']}")
+        B2_AVAILABLE = True
+    except ClientError as e:
+        logger.error(f"✗ Cannot access bucket {B2_CONFIG['BUCKET_NAME']}: {e}")
+        B2_AVAILABLE = False
+        
 except Exception as e:
     logger.error(f"✗ Failed to initialize B2 client: {e}")
     B2_AVAILABLE = False
@@ -128,6 +136,9 @@ CORS(app, resources={
         "max_age": 3600
     },
     r"/static/*": {
+        "origins": ["*"]
+    },
+    r"/images/*": {
         "origins": ["*"]
     }
 })
@@ -270,6 +281,9 @@ class B2DataStore:
         
         self.initialized = True
         logger.info("✓ All data loaded from Backblaze B2")
+        logger.info(f"  Products: {len(self.cache['products'])}")
+        logger.info(f"  Sales: {len(self.cache['sales'])}")
+        logger.info(f"  Images: {len(self.cache['b2_images'])}")
     
     @property
     def products(self):
@@ -409,8 +423,10 @@ def verify_image_exists(s3_key):
         return False
     try:
         b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
+        logger.info(f"✓ Image exists in B2: {s3_key}")
         return True
-    except ClientError:
+    except ClientError as e:
+        logger.error(f"Image not found in B2: {s3_key} - {e}")
         return False
 
 # ==================== IMAGE PROXY ROUTE ====================
@@ -442,7 +458,7 @@ def proxy_image(s3_key):
         resp.headers['Cache-Control'] = 'public, max-age=31536000'
         resp.headers['Access-Control-Allow-Origin'] = '*'
         
-        logger.info(f"✓ Successfully served image via proxy: {s3_key}")
+        logger.info(f"✓ Successfully served image via proxy: {s3_key} ({len(image_data)} bytes)")
         return resp
         
     except ClientError as e:
@@ -489,8 +505,12 @@ def get_public_products():
             
             # Use proxy URL for images
             if product.get('s3_key'):
-                product_copy['image'] = f"/api/images/{product['s3_key']}"
-                product_copy['imageUrl'] = f"/api/images/{product['s3_key']}"
+                # Verify image exists
+                if verify_image_exists(product['s3_key']):
+                    product_copy['image'] = f"/api/images/{product['s3_key']}"
+                    product_copy['imageUrl'] = f"/api/images/{product['s3_key']}"
+                else:
+                    product_copy['image'] = '/static/placeholder.png'
             else:
                 product_copy['image'] = '/static/placeholder.png'
             
@@ -617,8 +637,19 @@ def upload_to_b2():
         if not content_type:
             content_type = mimetypes.guess_type(file.filename)[0] or 'image/jpeg'
         
+        logger.info(f"Uploading to B2: {s3_key} ({content_type})")
+        
         # Upload to B2
         file.seek(0)
+        
+        # Read the file data for verification
+        file_data = file.read()
+        file_size = len(file_data)
+        
+        # Reset file pointer for upload
+        file.seek(0)
+        
+        # Upload to B2
         b2_client.upload_fileobj(
             file,
             B2_CONFIG['BUCKET_NAME'],
@@ -634,7 +665,14 @@ def upload_to_b2():
             }
         )
         
-        logger.info(f"✓ Successfully uploaded image to B2: {s3_key}")
+        logger.info(f"✓ Successfully uploaded image to B2: {s3_key} ({file_size} bytes)")
+        
+        # Verify the upload was successful
+        try:
+            b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
+            logger.info(f"✓ Verified image exists in B2: {s3_key}")
+        except Exception as e:
+            logger.error(f"Failed to verify image in B2: {e}")
         
         # Generate proxy URL for immediate display
         proxy_url = f"/api/images/{s3_key}"
@@ -648,17 +686,13 @@ def upload_to_b2():
                 'fileName': unique_filename,
                 'bucketId': B2_CONFIG['BUCKET_ID'],
                 'bucketName': B2_CONFIG['BUCKET_NAME'],
-                'uploadedAt': datetime.now().isoformat()
+                'uploadedAt': datetime.now().isoformat(),
+                'fileSize': file_size,
+                'contentType': content_type
             }
             data_store.b2_images.append(image_record)
             data_store.save_b2_images()
-        
-        # Verify the upload was successful
-        try:
-            b2_client.head_object(Bucket=B2_CONFIG['BUCKET_NAME'], Key=s3_key)
-            logger.info(f"✓ Verified image exists in B2: {s3_key}")
-        except Exception as e:
-            logger.error(f"Failed to verify image in B2: {e}")
+            logger.info(f"✓ Saved image record to B2 data store")
         
         # Return both url and image field for compatibility
         return jsonify({
@@ -696,8 +730,12 @@ def get_products():
             
             # Use proxy URL for images
             if product.get('s3_key'):
-                product_copy['image'] = f"/api/images/{product['s3_key']}"
-                product_copy['imageUrl'] = f"/api/images/{product['s3_key']}"
+                # Verify image exists
+                if verify_image_exists(product['s3_key']):
+                    product_copy['image'] = f"/api/images/{product['s3_key']}"
+                    product_copy['imageUrl'] = f"/api/images/{product['s3_key']}"
+                else:
+                    product_copy['image'] = '/static/placeholder.png'
             else:
                 product_copy['image'] = '/static/placeholder.png'
             
@@ -790,6 +828,12 @@ def create_product():
             # Use proxy URL for display
             product['image'] = f"/api/images/{s3_key}"
             product['image_source'] = 'b2'
+            
+            # Verify image exists
+            if verify_image_exists(s3_key):
+                logger.info(f"✓ Product {name} linked to existing image: {s3_key}")
+            else:
+                logger.warning(f"⚠ Image not found for product {name}: {s3_key}")
         else:
             product['image'] = '/static/placeholder.png'
             product['image_source'] = 'placeholder'
@@ -810,6 +854,8 @@ def create_product():
         }
         data_store.notifications.insert(0, notification)
         data_store.save_notifications()
+        
+        logger.info(f"✓ Product created successfully: {name} (ID: {product_id})")
         
         return jsonify({
             'success': True,
@@ -903,6 +949,9 @@ def update_product(product_id):
                 # Use proxy URL
                 product['image'] = f"/api/images/{s3_key}"
                 product['image_source'] = 'b2'
+                
+                # Verify image exists
+                verify_image_exists(s3_key)
         
         product['lastUpdated'] = datetime.now().isoformat()
         
@@ -911,6 +960,8 @@ def update_product(product_id):
         
         if not save_success:
             return jsonify({'error': 'Failed to save product to B2'}), 500
+        
+        logger.info(f"✓ Product updated successfully: {product['name']} (ID: {product_id})")
         
         return jsonify({
             'success': True,
@@ -959,6 +1010,8 @@ def delete_product(product_id):
         }
         data_store.notifications.insert(0, notification)
         data_store.save_notifications()
+        
+        logger.info(f"✓ Product deleted successfully: {product['name']} (ID: {product_id})")
         
         return jsonify({'success': True, 'message': 'Product deleted successfully'}), 200
         
@@ -1115,6 +1168,8 @@ def create_sale():
         }
         data_store.notifications.insert(0, notification)
         data_store.save_notifications()
+        
+        logger.info(f"✓ Sale recorded: {product['name']} - {quantity} x Size {size} @ {unit_price}")
         
         return jsonify({
             'success': True,
