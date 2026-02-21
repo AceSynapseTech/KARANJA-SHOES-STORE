@@ -549,6 +549,19 @@ def get_sales():
         sales = get_table_data('sales')
         # Sort by timestamp descending (newest first)
         sales.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # Convert to camelCase for frontend
+        for sale in sales:
+            sale['productId'] = sale.get('productid')
+            sale['productName'] = sale.get('productname')
+            sale['productSKU'] = sale.get('productsku')
+            sale['buyPrice'] = sale.get('buyprice', 0)
+            sale['unitPrice'] = sale.get('unitprice', 0)
+            sale['totalAmount'] = sale.get('totalamount', 0)
+            sale['totalProfit'] = sale.get('totalprofit', 0)
+            sale['customerName'] = sale.get('customername', '')
+            sale['isBargain'] = sale.get('isbargain', False)
+        
         logger.info(f"Returning {len(sales)} sales records")
         return jsonify(sales), 200
     except Exception as e:
@@ -622,23 +635,23 @@ def create_sale():
         notes = data.get('notes', '')
         is_bargain = data.get('isBargain', False)
         
-        # Create sale record
+        # Create sale record with LOWERCASE column names to match database
         sale_id = int(datetime.now().timestamp() * 1000)
         sale = {
             'id': sale_id,
-            'productId': product_id,
-            'productName': product['name'],
-            'productSKU': product.get('sku', ''),
+            'productid': product_id,
+            'productname': product['name'],
+            'productsku': product.get('sku', ''),
             'category': product.get('category', ''),
-            'buyPrice': product['buyprice'],
+            'buyprice': product['buyprice'],
             'size': size_key,
             'quantity': quantity,
-            'unitPrice': unit_price,
-            'totalAmount': total_amount,
-            'totalProfit': total_profit,
-            'customerName': customer_name,
+            'unitprice': unit_price,
+            'totalamount': total_amount,
+            'totalprofit': total_profit,
+            'customername': customer_name,
             'notes': notes,
-            'isBargain': is_bargain,
+            'isbargain': is_bargain,
             'timestamp': datetime.now().isoformat()
         }
         
@@ -646,7 +659,7 @@ def create_sale():
         if save_table_data('sales', sale):
             logger.info(f"✓ Sale recorded: {product['name']} - {quantity} x Size {size} @ {unit_price}")
             
-            # Create notification
+            # Create notification with lowercase column names
             notification = {
                 'id': int(datetime.now().timestamp() * 1000) + 1,
                 'message': f'Sale: {product["name"]} ({quantity} × Size {size})',
@@ -656,9 +669,28 @@ def create_sale():
             }
             save_table_data('notifications', notification)
             
+            # Prepare response with camelCase for frontend
+            response_sale = {
+                'id': sale_id,
+                'productId': product_id,
+                'productName': product['name'],
+                'productSKU': product.get('sku', ''),
+                'category': product.get('category', ''),
+                'buyPrice': product['buyprice'],
+                'size': size_key,
+                'quantity': quantity,
+                'unitPrice': unit_price,
+                'totalAmount': total_amount,
+                'totalProfit': total_profit,
+                'customerName': customer_name,
+                'notes': notes,
+                'isBargain': is_bargain,
+                'timestamp': datetime.now().isoformat()
+            }
+            
             return jsonify({
                 'success': True,
-                'sale': sale,
+                'sale': response_sale,
                 'message': 'Sale recorded successfully'
             }), 201
         else:
@@ -724,13 +756,13 @@ def get_dashboard_stats():
         
         total_products = len(products)
         total_stock = sum([p.get('totalstock', 0) for p in products])
-        total_revenue = sum([s.get('totalAmount', 0) for s in sales])
-        total_profit = sum([s.get('totalProfit', 0) for s in sales])
+        total_revenue = sum([s.get('totalamount', 0) for s in sales])
+        total_profit = sum([s.get('totalprofit', 0) for s in sales])
         
         today = datetime.now().strftime('%Y-%m-%d')
         today_sales = [s for s in sales if s.get('timestamp', '').startswith(today)]
-        today_revenue = sum([s.get('totalAmount', 0) for s in today_sales])
-        today_profit = sum([s.get('totalProfit', 0) for s in today_sales])
+        today_revenue = sum([s.get('totalamount', 0) for s in today_sales])
+        today_profit = sum([s.get('totalprofit', 0) for s in today_sales])
         today_items = sum([s.get('quantity', 0) for s in today_sales])
         
         return jsonify({
