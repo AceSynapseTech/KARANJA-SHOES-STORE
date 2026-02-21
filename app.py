@@ -75,6 +75,7 @@ jwt = JWTManager(app)
 def get_table_data(table_name):
     """Get all data from a Supabase table"""
     if not supabase:
+        logger.error(f"Supabase not available for {table_name}")
         return []
     try:
         response = supabase.table(table_name).select("*").execute()
@@ -87,16 +88,19 @@ def get_table_data(table_name):
 def save_table_data(table_name, data):
     """Save data to Supabase table"""
     if not supabase:
+        logger.error(f"Supabase not available for saving to {table_name}")
         return False
     try:
         if isinstance(data, list):
             result = supabase.table(table_name).upsert(data).execute()
+            logger.info(f"✓ Saved {len(data)} records to {table_name}")
         else:
             result = supabase.table(table_name).upsert(data).execute()
-        logger.info(f"✓ Saved to {table_name}")
+            logger.info(f"✓ Saved single record to {table_name} with ID: {data.get('id', 'unknown')}")
         return True
     except Exception as e:
         logger.error(f"Error saving to {table_name}: {e}")
+        logger.error(traceback.format_exc())
         return False
 
 def delete_table_data(table_name, record_id):
@@ -543,7 +547,9 @@ def get_sales():
     """Get all sales"""
     try:
         sales = get_table_data('sales')
+        # Sort by timestamp descending (newest first)
         sales.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        logger.info(f"Returning {len(sales)} sales records")
         return jsonify(sales), 200
     except Exception as e:
         logger.error(f"Error getting sales: {e}")
@@ -555,17 +561,21 @@ def create_sale():
     """Record new sale"""
     try:
         data = request.get_json()
+        logger.info(f"Received sale data: {json.dumps(data)}")
         
+        # Validate required fields
         product_id = data.get('productId')
         size = data.get('size')
         quantity = data.get('quantity')
         unit_price = data.get('unitPrice')
-        customer_name = data.get('customerName', 'Walk-in Customer')
-        notes = data.get('notes', '')
-        is_bargain = data.get('isBargain', False)
         
         if not all([product_id, size, quantity, unit_price]):
-            return jsonify({'error': 'Missing required fields'}), 400
+            missing = []
+            if not product_id: missing.append('productId')
+            if not size: missing.append('size')
+            if not quantity: missing.append('quantity')
+            if not unit_price: missing.append('unitPrice')
+            return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
         
         # Get product
         products = get_table_data('products')
@@ -578,15 +588,19 @@ def create_sale():
         if not product:
             return jsonify({'error': 'Product not found'}), 404
         
+        # Check stock
         size_key = str(size)
-        if size_key not in product['sizes'] or product['sizes'][size_key] < quantity:
-            return jsonify({'error': 'Insufficient stock'}), 400
+        if size_key not in product['sizes']:
+            return jsonify({'error': f'Size {size} not available for this product'}), 400
+        
+        current_stock = product['sizes'].get(size_key, 0)
+        if current_stock < quantity:
+            return jsonify({'error': f'Insufficient stock. Only {current_stock} available in size {size}'}), 400
         
         # Update stock
-        product['sizes'][size_key] -= quantity
-        if product['sizes'][size_key] < 0:
-            product['sizes'][size_key] = 0
+        product['sizes'][size_key] = current_stock - quantity
         
+        # Recalculate total stock
         total_stock = 0
         for stock in product['sizes'].values():
             total_stock += stock if stock > 0 else 0
@@ -594,20 +608,30 @@ def create_sale():
         product['lastupdated'] = datetime.now().isoformat()
         
         # Save updated product
-        save_table_data('products', product)
+        if not save_table_data('products', product):
+            logger.error("Failed to update product stock")
+            return jsonify({'error': 'Failed to update product stock'}), 500
         
+        # Calculate totals
         total_amount = unit_price * quantity
         total_cost = product['buyprice'] * quantity
         total_profit = total_amount - total_cost
         
+        # Get optional fields
+        customer_name = data.get('customerName', 'Walk-in Customer')
+        notes = data.get('notes', '')
+        is_bargain = data.get('isBargain', False)
+        
+        # Create sale record
+        sale_id = int(datetime.now().timestamp() * 1000)
         sale = {
-            'id': int(datetime.now().timestamp() * 1000),
+            'id': sale_id,
             'productId': product_id,
             'productName': product['name'],
             'productSKU': product.get('sku', ''),
             'category': product.get('category', ''),
             'buyPrice': product['buyprice'],
-            'size': size,
+            'size': size_key,
             'quantity': quantity,
             'unitPrice': unit_price,
             'totalAmount': total_amount,
@@ -619,17 +643,31 @@ def create_sale():
         }
         
         # Save sale
-        save_table_data('sales', sale)
-        
-        logger.info(f"✓ Sale recorded: {product['name']} - {quantity} x Size {size} @ {unit_price}")
-        
-        return jsonify({
-            'success': True,
-            'sale': sale
-        }), 201
+        if save_table_data('sales', sale):
+            logger.info(f"✓ Sale recorded: {product['name']} - {quantity} x Size {size} @ {unit_price}")
+            
+            # Create notification
+            notification = {
+                'id': int(datetime.now().timestamp() * 1000) + 1,
+                'message': f'Sale: {product["name"]} ({quantity} × Size {size})',
+                'type': 'success',
+                'timestamp': datetime.now().isoformat(),
+                'read': False
+            }
+            save_table_data('notifications', notification)
+            
+            return jsonify({
+                'success': True,
+                'sale': sale,
+                'message': 'Sale recorded successfully'
+            }), 201
+        else:
+            logger.error("Failed to save sale record")
+            return jsonify({'error': 'Failed to save sale record'}), 500
         
     except Exception as e:
         logger.error(f"Error creating sale: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 # ==================== NOTIFICATION ROUTES ====================
@@ -740,9 +778,12 @@ def get_storage_info():
 def health_check():
     """Health check endpoint"""
     product_count = 0
+    sale_count = 0
     try:
         products = get_table_data('products')
         product_count = len(products)
+        sales = get_table_data('sales')
+        sale_count = len(sales)
     except:
         pass
         
@@ -751,6 +792,7 @@ def health_check():
         'timestamp': datetime.now().isoformat(),
         'supabase': 'connected' if SUPABASE_AVAILABLE else 'disconnected',
         'products': product_count,
+        'sales': sale_count,
         'storage_type': 'supabase'
     }), 200
 
