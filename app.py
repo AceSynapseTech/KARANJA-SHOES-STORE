@@ -601,6 +601,8 @@ def create_sale():
         if not product:
             return jsonify({'error': 'Product not found'}), 404
         
+        logger.info(f"Found product: {product['name']}, current stock: {json.dumps(product.get('sizes', {}))}")
+        
         # Check stock
         size_key = str(size)
         if size_key not in product['sizes']:
@@ -621,6 +623,7 @@ def create_sale():
         product['lastupdated'] = datetime.now().isoformat()
         
         # Save updated product
+        logger.info(f"Updating product stock: new total stock = {total_stock}")
         if not save_table_data('products', product):
             logger.error("Failed to update product stock")
             return jsonify({'error': 'Failed to update product stock'}), 500
@@ -643,23 +646,25 @@ def create_sale():
             'productname': product['name'],
             'productsku': product.get('sku', ''),
             'category': product.get('category', ''),
-            'buyprice': product['buyprice'],
+            'buyprice': float(product['buyprice']),
             'size': size_key,
-            'quantity': quantity,
-            'unitprice': unit_price,
-            'totalamount': total_amount,
-            'totalprofit': total_profit,
+            'quantity': int(quantity),
+            'unitprice': float(unit_price),
+            'totalamount': float(total_amount),
+            'totalprofit': float(total_profit),
             'customername': customer_name,
             'notes': notes,
-            'isbargain': is_bargain,
+            'isbargain': bool(is_bargain),
             'timestamp': datetime.now().isoformat()
         }
         
+        logger.info(f"Attempting to save sale: {json.dumps(sale, default=str)}")
+        
         # Save sale
         if save_table_data('sales', sale):
-            logger.info(f"✓ Sale recorded: {product['name']} - {quantity} x Size {size} @ {unit_price}")
+            logger.info(f"✓ Sale recorded successfully: {product['name']} - {quantity} x Size {size} @ {unit_price}")
             
-            # Create notification with lowercase column names
+            # Create notification
             notification = {
                 'id': int(datetime.now().timestamp() * 1000) + 1,
                 'message': f'Sale: {product["name"]} ({quantity} × Size {size})',
@@ -676,15 +681,15 @@ def create_sale():
                 'productName': product['name'],
                 'productSKU': product.get('sku', ''),
                 'category': product.get('category', ''),
-                'buyPrice': product['buyprice'],
+                'buyPrice': float(product['buyprice']),
                 'size': size_key,
-                'quantity': quantity,
-                'unitPrice': unit_price,
-                'totalAmount': total_amount,
-                'totalProfit': total_profit,
+                'quantity': int(quantity),
+                'unitPrice': float(unit_price),
+                'totalAmount': float(total_amount),
+                'totalProfit': float(total_profit),
                 'customerName': customer_name,
                 'notes': notes,
-                'isBargain': is_bargain,
+                'isBargain': bool(is_bargain),
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -694,7 +699,7 @@ def create_sale():
                 'message': 'Sale recorded successfully'
             }), 201
         else:
-            logger.error("Failed to save sale record")
+            logger.error("Failed to save sale record - save_table_data returned False")
             return jsonify({'error': 'Failed to save sale record'}), 500
         
     except Exception as e:
@@ -827,6 +832,60 @@ def health_check():
         'sales': sale_count,
         'storage_type': 'supabase'
     }), 200
+
+# ==================== DEBUG ENDPOINT ====================
+
+@app.route('/api/debug/sales-table', methods=['GET'])
+@jwt_required()
+def debug_sales_table():
+    """Debug endpoint to check sales table structure"""
+    if not supabase:
+        return jsonify({'error': 'Supabase not connected'}), 503
+    
+    try:
+        # Try to get table info
+        result = {
+            'table_exists': False,
+            'columns': [],
+            'can_select': False,
+            'can_insert': False
+        }
+        
+        # Check if we can query the table
+        try:
+            test_query = supabase.table('sales').select('*').limit(1).execute()
+            result['table_exists'] = True
+            result['can_select'] = True
+            if hasattr(test_query, 'data'):
+                result['sample_data'] = test_query.data
+        except Exception as e:
+            result['select_error'] = str(e)
+        
+        # Try to insert a test record
+        try:
+            test_id = int(datetime.now().timestamp())
+            test_sale = {
+                'id': test_id,
+                'productid': 999999,
+                'productname': 'Test Product',
+                'quantity': 1,
+                'unitprice': 100,
+                'totalamount': 100,
+                'timestamp': datetime.now().isoformat()
+            }
+            insert_result = supabase.table('sales').insert(test_sale).execute()
+            result['can_insert'] = True
+            
+            # Clean up
+            supabase.table('sales').delete().eq('id', test_id).execute()
+        except Exception as e:
+            result['insert_error'] = str(e)
+            result['can_insert'] = False
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 # ==================== STATIC FILE SERVING ====================
 
