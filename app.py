@@ -638,7 +638,7 @@ def create_sale():
         notes = data.get('notes', '')
         is_bargain = data.get('isBargain', False)
         
-        # Create sale record with LOWERCASE column names to match database
+        # Create sale record with EXACT column names matching your database
         sale_id = int(datetime.now().timestamp() * 1000)
         sale = {
             'id': sale_id,
@@ -809,6 +809,62 @@ def get_storage_info():
         'storage_type': 'supabase'
     }), 200
 
+# ==================== DEBUG ENDPOINT ====================
+
+@app.route('/api/debug/sales-table', methods=['GET'])
+@jwt_required()
+def debug_sales_table():
+    """Debug endpoint to check sales table structure"""
+    if not supabase:
+        return jsonify({'error': 'Supabase not connected'}), 503
+    
+    results = {
+        'table_exists': False,
+        'columns': [],
+        'can_select': False,
+        'can_insert': False,
+        'error_details': None
+    }
+    
+    try:
+        # Try to query the table
+        try:
+            response = supabase.table('sales').select('*').limit(1).execute()
+            results['table_exists'] = True
+            results['can_select'] = True
+            if hasattr(response, 'data'):
+                results['sample_data'] = response.data
+        except Exception as e:
+            results['select_error'] = str(e)
+        
+        # Try to insert a minimal test record
+        try:
+            test_id = int(datetime.now().timestamp())
+            test_sale = {
+                'id': test_id,
+                'productid': 999999,
+                'productname': 'Test Product',
+                'quantity': 1,
+                'unitprice': 100,
+                'totalamount': 100,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            insert_result = supabase.table('sales').insert(test_sale).execute()
+            results['can_insert'] = True
+            
+            # Clean up
+            supabase.table('sales').delete().eq('id', test_id).execute()
+        except Exception as e:
+            results['insert_error'] = str(e)
+            results['can_insert'] = False
+            results['error_details'] = traceback.format_exc()
+        
+        return jsonify(results), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
 # ==================== HEALTH CHECK ====================
 
 @app.route('/api/health', methods=['GET'])
@@ -832,60 +888,6 @@ def health_check():
         'sales': sale_count,
         'storage_type': 'supabase'
     }), 200
-
-# ==================== DEBUG ENDPOINT ====================
-
-@app.route('/api/debug/sales-table', methods=['GET'])
-@jwt_required()
-def debug_sales_table():
-    """Debug endpoint to check sales table structure"""
-    if not supabase:
-        return jsonify({'error': 'Supabase not connected'}), 503
-    
-    try:
-        # Try to get table info
-        result = {
-            'table_exists': False,
-            'columns': [],
-            'can_select': False,
-            'can_insert': False
-        }
-        
-        # Check if we can query the table
-        try:
-            test_query = supabase.table('sales').select('*').limit(1).execute()
-            result['table_exists'] = True
-            result['can_select'] = True
-            if hasattr(test_query, 'data'):
-                result['sample_data'] = test_query.data
-        except Exception as e:
-            result['select_error'] = str(e)
-        
-        # Try to insert a test record
-        try:
-            test_id = int(datetime.now().timestamp())
-            test_sale = {
-                'id': test_id,
-                'productid': 999999,
-                'productname': 'Test Product',
-                'quantity': 1,
-                'unitprice': 100,
-                'totalamount': 100,
-                'timestamp': datetime.now().isoformat()
-            }
-            insert_result = supabase.table('sales').insert(test_sale).execute()
-            result['can_insert'] = True
-            
-            # Clean up
-            supabase.table('sales').delete().eq('id', test_id).execute()
-        except Exception as e:
-            result['insert_error'] = str(e)
-            result['can_insert'] = False
-        
-        return jsonify(result), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 # ==================== STATIC FILE SERVING ====================
 
