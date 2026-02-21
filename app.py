@@ -539,7 +539,7 @@ def get_public_products():
         logger.error(f"Error getting public products: {e}")
         return jsonify([]), 200
 
-# ==================== SALES ROUTES ====================
+# ==================== SALES ROUTES - FIXED ====================
 
 @app.route('/api/sales', methods=['GET'])
 @jwt_required()
@@ -571,24 +571,32 @@ def get_sales():
 @app.route('/api/sales', methods=['POST'])
 @jwt_required()
 def create_sale():
-    """Record new sale"""
+    """Record new sale - FIXED VERSION"""
     try:
         data = request.get_json()
         logger.info(f"Received sale data: {json.dumps(data)}")
         
-        # Validate required fields
-        product_id = data.get('productId')
+        # Validate required fields (accept both camelCase and snake_case)
+        product_id = data.get('productId') or data.get('productid')
         size = data.get('size')
         quantity = data.get('quantity')
-        unit_price = data.get('unitPrice')
+        unit_price = data.get('unitPrice') or data.get('unitprice')
         
         if not all([product_id, size, quantity, unit_price]):
             missing = []
-            if not product_id: missing.append('productId')
+            if not product_id: missing.append('productId/productid')
             if not size: missing.append('size')
             if not quantity: missing.append('quantity')
-            if not unit_price: missing.append('unitPrice')
+            if not unit_price: missing.append('unitPrice/unitprice')
             return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
+        
+        # Convert to appropriate types
+        try:
+            product_id = int(product_id)
+            quantity = int(quantity)
+            unit_price = float(unit_price)
+        except ValueError as e:
+            return jsonify({'error': f'Invalid number format: {str(e)}'}), 400
         
         # Get product
         products = get_table_data('products')
@@ -599,25 +607,34 @@ def create_sale():
                 break
         
         if not product:
-            return jsonify({'error': 'Product not found'}), 404
+            return jsonify({'error': f'Product not found with ID: {product_id}'}), 404
         
         logger.info(f"Found product: {product['name']}, current stock: {json.dumps(product.get('sizes', {}))}")
         
         # Check stock
         size_key = str(size)
-        if size_key not in product['sizes']:
-            return jsonify({'error': f'Size {size} not available for this product'}), 400
+        sizes = product.get('sizes', {})
         
-        current_stock = product['sizes'].get(size_key, 0)
+        if size_key not in sizes:
+            available_sizes = [s for s, stock in sizes.items() if stock > 0]
+            return jsonify({
+                'error': f'Size {size} not available for this product',
+                'available_sizes': available_sizes
+            }), 400
+        
+        current_stock = sizes.get(size_key, 0)
         if current_stock < quantity:
-            return jsonify({'error': f'Insufficient stock. Only {current_stock} available in size {size}'}), 400
+            return jsonify({
+                'error': f'Insufficient stock. Only {current_stock} available in size {size}',
+                'available_stock': current_stock
+            }), 400
         
         # Update stock
-        product['sizes'][size_key] = current_stock - quantity
+        sizes[size_key] = current_stock - quantity
         
         # Recalculate total stock
         total_stock = 0
-        for stock in product['sizes'].values():
+        for stock in sizes.values():
             total_stock += stock if stock > 0 else 0
         product['totalstock'] = total_stock
         product['lastupdated'] = datetime.now().isoformat()
@@ -630,32 +647,34 @@ def create_sale():
         
         # Calculate totals
         total_amount = unit_price * quantity
-        total_cost = product['buyprice'] * quantity
+        total_cost = product.get('buyprice', 0) * quantity
         total_profit = total_amount - total_cost
         
-        # Get optional fields
-        customer_name = data.get('customerName', 'Walk-in Customer')
+        # Get optional fields (accept both camelCase and snake_case)
+        customer_name = data.get('customerName') or data.get('customername') or 'Walk-in Customer'
         notes = data.get('notes', '')
-        is_bargain = data.get('isBargain', False)
+        is_bargain = data.get('isBargain') or data.get('isbargain') or False
         
         # Create sale record with EXACT column names matching your database
         sale_id = int(datetime.now().timestamp() * 1000)
+        timestamp = datetime.now().isoformat()
+        
         sale = {
             'id': sale_id,
             'productid': product_id,
-            'productname': product['name'],
+            'productname': product.get('name', ''),
             'productsku': product.get('sku', ''),
             'category': product.get('category', ''),
-            'buyprice': float(product['buyprice']),
+            'buyprice': float(product.get('buyprice', 0)),
             'size': size_key,
-            'quantity': int(quantity),
-            'unitprice': float(unit_price),
-            'totalamount': float(total_amount),
-            'totalprofit': float(total_profit),
+            'quantity': quantity,
+            'unitprice': unit_price,
+            'totalamount': total_amount,
+            'totalprofit': total_profit,
             'customername': customer_name,
             'notes': notes,
             'isbargain': bool(is_bargain),
-            'timestamp': datetime.now().isoformat()
+            'timestamp': timestamp
         }
         
         logger.info(f"Attempting to save sale: {json.dumps(sale, default=str)}")
@@ -669,7 +688,7 @@ def create_sale():
                 'id': int(datetime.now().timestamp() * 1000) + 1,
                 'message': f'Sale: {product["name"]} ({quantity} × Size {size})',
                 'type': 'success',
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': timestamp,
                 'read': False
             }
             save_table_data('notifications', notification)
@@ -681,16 +700,16 @@ def create_sale():
                 'productName': product['name'],
                 'productSKU': product.get('sku', ''),
                 'category': product.get('category', ''),
-                'buyPrice': float(product['buyprice']),
+                'buyPrice': float(product.get('buyprice', 0)),
                 'size': size_key,
-                'quantity': int(quantity),
-                'unitPrice': float(unit_price),
-                'totalAmount': float(total_amount),
-                'totalProfit': float(total_profit),
+                'quantity': quantity,
+                'unitPrice': unit_price,
+                'totalAmount': total_amount,
+                'totalProfit': total_profit,
                 'customerName': customer_name,
                 'notes': notes,
                 'isBargain': bool(is_bargain),
-                'timestamp': datetime.now().isoformat()
+                'timestamp': timestamp
             }
             
             return jsonify({
@@ -809,7 +828,7 @@ def get_storage_info():
         'storage_type': 'supabase'
     }), 200
 
-# ==================== DEBUG ENDPOINT ====================
+# ==================== DEBUG ENDPOINTS ====================
 
 @app.route('/api/debug/sales-table', methods=['GET'])
 @jwt_required()
@@ -865,6 +884,34 @@ def debug_sales_table():
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
+@app.route('/api/debug/test-supabase', methods=['GET'])
+@jwt_required()
+def test_supabase():
+    """Test Supabase connection and tables"""
+    results = {
+        'supabase_available': SUPABASE_AVAILABLE,
+        'tables': {}
+    }
+    
+    if not supabase:
+        return jsonify(results), 200
+    
+    # Test each table
+    for table in ['products', 'sales', 'notifications']:
+        try:
+            response = supabase.table(table).select('*').limit(1).execute()
+            results['tables'][table] = {
+                'exists': True,
+                'count': len(response.data) if hasattr(response, 'data') else 0
+            }
+        except Exception as e:
+            results['tables'][table] = {
+                'exists': False,
+                'error': str(e)
+            }
+    
+    return jsonify(results), 200
+
 # ==================== HEALTH CHECK ====================
 
 @app.route('/api/health', methods=['GET'])
@@ -887,6 +934,15 @@ def health_check():
         'products': product_count,
         'sales': sale_count,
         'storage_type': 'supabase'
+    }), 200
+
+@app.route('/api/public/health', methods=['GET'])
+def public_health():
+    """Public health check endpoint (no auth)"""
+    return jsonify({
+        'status': 'online',
+        'message': 'Karanja Shoe Store API is running',
+        'timestamp': datetime.now().isoformat()
     }), 200
 
 # ==================== STATIC FILE SERVING ====================
