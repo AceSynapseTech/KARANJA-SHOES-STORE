@@ -2128,6 +2128,8 @@
                                 <option value="Kids Shoes">Kids Shoes</option>
                                 <option value="School Shoes">School Shoes</option>
                                 <option value="MITUMBA">MITUMBA</option>
+                                <!-- NEW CATEGORY ADDED - SOLES -->
+                                <option value="Soles">Soles</option>
                             </select>
                             <select id="sizeFilter" class="filter-select">
                                 <option value="">All Sizes</option>
@@ -2649,6 +2651,8 @@
                                     <option value="Kids Shoes">Kids Shoes</option>
                                     <option value="School Shoes">School Shoes</option>
                                     <option value="MITUMBA">MITUMBA</option>
+                                    <!-- NEW CATEGORY ADDED - SOLES -->
+                                    <option value="Soles">Soles</option>
                                 </select>
                             </div>
                             
@@ -2949,7 +2953,20 @@
         PERSONAL_INCOME_PERCENTAGE: 25,
         BUSINESS_HEALTH_GOAL: 10000,
         DAILY_STATEMENT_TIME: 21,
-        SIZE_RANGE: { MIN: 1, MAX: 50 }
+        SIZE_RANGE: { MIN: 1, MAX: 50 },
+        // NEW: Added Soles to the categories list
+        CATEGORIES: [
+            "Official Shoes",
+            "Sports Shoes",
+            "Casual Shoes",
+            "Boots",
+            "Sandals",
+            "Sneakers",
+            "Kids Shoes",
+            "School Shoes",
+            "MITUMBA",
+            "Soles" // NEW CATEGORY ADDED - SOLES
+        ]
     };
 
     // ==================== JWT TOKEN MANAGEMENT ====================
@@ -3429,7 +3446,7 @@
             if (categoryCtx) {
                 this.charts.categoryChart = new Chart(categoryCtx, {
                     type: 'pie',
-                    data: { labels: [], datasets: [{ data: [], backgroundColor: ['#ff5722', '#2196f3', '#4caf50', '#ff9800', '#9c27b0', '#009688', '#795548', '#607d8b'] }] },
+                    data: { labels: [], datasets: [{ data: [], backgroundColor: ['#ff5722', '#2196f3', '#4caf50', '#ff9800', '#9c27b0', '#009688', '#795548', '#607d8b', '#e91e63', '#3f51b5'] }] },
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
                 });
             }
